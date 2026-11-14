@@ -14,12 +14,17 @@ jobs:
           ok = True
           for mf in glob.glob("plugins/*/__x".replace("__x","/plugin.json")) + glob.glob("plugins/*/plugin.json"):
               d = json.load(open(mf, encoding="utf-8"))
-              for k in ("id","name","brief","detail","author","version","files"):
+              for k in ("id","name","brief","detail","author","version","files","entry"):
                   assert k in d, f"{mf} missing {k}"
               assert re.match(r"^[a-z0-9-]{2,40}$", d["id"]), f"{mf} bad id"
               assert len(d["brief"]) <= 200 and len(d["detail"]) <= 1000
               parent = os.path.dirname(mf)
               assert os.path.basename(parent) == f"{d['id']}__{d['author']}", f"{mf}: dir name mismatch"
+              # entry 必须在 files 清单里，且文件真的存在 —— 主程序按 entry 拉起进程，
+              # 缺了它插件装了也跑不起来（清单能解析 ≠ 插件能跑）。
+              paths = [f["path"] for f in d["files"]]
+              assert d["entry"] in paths, f"{mf}: entry {d['entry']} not listed in files"
+              assert os.path.isfile(os.path.join(parent, d["entry"])), f"{mf}: entry file missing"
               for f in d["files"]:
                   p = os.path.join(parent, f["path"])
                   h = hashlib.sha256(open(p,"rb").read()).hexdigest()

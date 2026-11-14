@@ -93,15 +93,15 @@
       "files": [
         {
           "path": "plugin.json",
-          "sha256": "38ce07e9a5e304ec9f05574c62358d7e82a7c9b00fdaada53fc5e7c607d783c0",
+          "sha256": "629ce09e11391648e0364d01baced9efdaacd4464a8d5a713bab7dc0110994b0",
           "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/font-renamer__alice/plugin.json",
-          "size": 682
+          "size": 723
         },
         {
           "path": "rename.py",
-          "sha256": "814dbf941bffe9ebc858947b5e64f925286b71f23f614fb5c6fbf45111b8b184",
+          "sha256": "9054bdfa26efdc36bb6f801bac22e6d1bad0f9470ff90b834761566698d701b2",
           "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/font-renamer__alice/rename.py",
-          "size": 36
+          "size": 1551
         }
       ],
       "dir": "plugins/font-renamer__alice"
@@ -124,15 +124,15 @@
       "files": [
         {
           "path": "count.py",
-          "sha256": "d5d1f8ae95684487761f5f8ddeb24af04ec2faece88eb4690928e8e3456021a5",
+          "sha256": "f42849a9d88824a59cda418070f0d7fd6cf88642e1cd8b77eca86d5fa859e575",
           "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/spec-counter__anonymous-7f3a/count.py",
-          "size": 36
+          "size": 1487
         },
         {
           "path": "plugin.json",
-          "sha256": "824566c3f497a395015f0ef778f99c97f5713289a936d7493ae53fa222dac0d4",
+          "sha256": "1705d3124da83205f5f3bbf2a11a049ee8bd325906e423da79c97c9d32fda2dd",
           "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/spec-counter__anonymous-7f3a/plugin.json",
-          "size": 528
+          "size": 568
         }
       ],
       "dir": "plugins/spec-counter__anonymous-7f3a"

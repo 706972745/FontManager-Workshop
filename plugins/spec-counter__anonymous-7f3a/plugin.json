@@ -5,6 +5,8 @@
   "detail": "扫描字体 cmap，统计指定文本的字符覆盖率，导出 CSV 报告。",
   "author": "anonymous-7f3a",
   "version": "0.3.0",
+  "entry": "count.py",
+  "apiLevel": 1,
   "permissions": [
     "fonts:read"
   ],
@@ -15,10 +17,10 @@
   "uploadedAt": "2026-11-14T15:00:00Z",
   "files": [
     {
-      "path": "plugin.json"
+      "path": "count.py"
     },
     {
-      "path": "count.py"
+      "path": "plugin.json"
     }
   ]
 }
