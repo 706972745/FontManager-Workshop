@@ -1,0 +1,24 @@
+{
+  "id": "spec-counter",
+  "name": "字数统计",
+  "brief": "统计字体库字符覆盖率，导出 CSV。",
+  "detail": "扫描字体 cmap，统计指定文本的字符覆盖率，导出 CSV 报告。",
+  "author": "anonymous-7f3a",
+  "version": "0.3.0",
+  "permissions": [
+    "fonts:read"
+  ],
+  "runtime": "python",
+  "minAppVersion": "2.1.7",
+  "lang": "zh-CN",
+  "official": false,
+  "uploadedAt": "2026-11-14T15:00:00Z",
+  "files": [
+    {
+      "path": "plugin.json"
+    },
+    {
+      "path": "count.py"
+    }
+  ]
+}

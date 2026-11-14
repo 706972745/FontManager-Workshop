@@ -1,0 +1,25 @@
+{
+  "id": "font-renamer",
+  "name": "批量重命名",
+  "brief": "按规则批量重命名字体族：前缀、后缀、序号、正则替换。",
+  "detail": "对当前字体库中的字体族批量重命名。\n支持：加前缀/后缀、序号填充、正则替换、预览 diff 后再应用。\n所有改动写入主程序字体库，可撤销。",
+  "author": "alice",
+  "version": "1.0.0",
+  "permissions": [
+    "fonts:read",
+    "fonts:write"
+  ],
+  "runtime": null,
+  "minAppVersion": "2.1.7",
+  "lang": "zh-CN",
+  "official": false,
+  "uploadedAt": "2026-11-14T14:00:00Z",
+  "files": [
+    {
+      "path": "plugin.json"
+    },
+    {
+      "path": "rename.py"
+    }
+  ]
+}
