@@ -1,6 +1,5 @@
 {
-  "version": "0.1.0-dev",
-  "sha256": null,
-  "size": null,
-  "note": "占位文件：workshop-panel.zip 首次发布后由维护者填入真实 sha256 与 size"
+  "version": "1.0.0",
+  "sha256": "983b86bcd867de6e4f47cb21087ea417126b8c2a837de6ac3fb3db3141dc846e",
+  "size": 119630
 }
