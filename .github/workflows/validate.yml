@@ -1,32 +1,29 @@
 name: Validate plugin PRs
+
+# 每个动到插件目录的 PR 都跑一遍。规则全在 .github/scripts/validate_plugins.py ——
+# 本地跑的是同一份代码，改规则时不用靠「推上去看红灯」来验证。
 on:
   pull_request:
-    paths: ["plugins/**"]
+    paths:
+      - "plugins/**"
+      - ".github/scripts/**"
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: manifest schema & sha256
-        shell: python
+        with:
+          # 作者归属校验要跟基线比 diff，浅克隆拿不到 base
+          fetch-depth: 0
+
+      - name: 校验清单 / 文件 / 权限 / 作者归属
+        env:
+          # fork 来的 PR 用 PR 作者登录名
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE: origin/${{ github.base_ref }}
         run: |
-          import json, glob, hashlib, os, re, sys
-          ok = True
-          for mf in glob.glob("plugins/*/__x".replace("__x","/plugin.json")) + glob.glob("plugins/*/plugin.json"):
-              d = json.load(open(mf, encoding="utf-8"))
-              for k in ("id","name","brief","detail","author","version","files","entry"):
-                  assert k in d, f"{mf} missing {k}"
-              assert re.match(r"^[a-z0-9-]{2,40}$", d["id"]), f"{mf} bad id"
-              assert len(d["brief"]) <= 200 and len(d["detail"]) <= 1000
-              parent = os.path.dirname(mf)
-              assert os.path.basename(parent) == f"{d['id']}__{d['author']}", f"{mf}: dir name mismatch"
-              # entry 必须在 files 清单里，且文件真的存在 —— 主程序按 entry 拉起进程，
-              # 缺了它插件装了也跑不起来（清单能解析 ≠ 插件能跑）。
-              paths = [f["path"] for f in d["files"]]
-              assert d["entry"] in paths, f"{mf}: entry {d['entry']} not listed in files"
-              assert os.path.isfile(os.path.join(parent, d["entry"])), f"{mf}: entry file missing"
-              for f in d["files"]:
-                  p = os.path.join(parent, f["path"])
-                  h = hashlib.sha256(open(p,"rb").read()).hexdigest()
-                  if f.get("sha256"): assert h == f["sha256"], f"{p} sha mismatch"
-          print("validate ok" if ok else "fail")
+          python3 .github/scripts/validate_plugins.py \
+            --root . \
+            --author "$AUTHOR" \
+            --base "$BASE"

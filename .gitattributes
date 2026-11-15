@@ -1,0 +1,8 @@
+# sha256 是安装的硬门槛：index.json 里记的 sha256 必须等于用户从
+# raw.githubusercontent 下到的**原始字节**。git 的换行转换（Windows 上
+# core.autocrlf=true 默认把 LF 转成 CRLF）会让工作区文件比 blob 多出几十字节，
+# 本地算出来的 sha256 就跟线上对不上 —— CI 跑在 Linux 上看不出来，用户装的时候
+# 才报「sha256 校验失败」。
+#
+# 所以：本仓库**禁止任何换行转换**，工作区字节 == blob 字节 == 下载字节。
+* -text

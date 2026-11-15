@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""registry 校验规则的自测：正例通过 + 每个反例都必须被拦住。
+
+为什么要有这个文件：`validate_plugins.py` 是审核闸的唯一实现，它一旦失效，
+registry 就变成「谁都能推什么就上什么」。改规则（放宽白名单、调大小上限）时
+先跑这个，比推上去看 CI 红灯快得多：
+
+    python .github/scripts/selftest.py
+
+每个用例在临时目录里复制一份 registry，改一处，然后跑真正的校验脚本。
+断言的是**脚本的退出码与报错文案**，不是内部函数 —— 这样重构实现不会误报。
+"""
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent.parent
+VALIDATOR = HERE / "validate_plugins.py"
+
+PLUGIN_DIR = "plugins/font-renamer__alice"
+
+
+def run(root: Path, *extra: str) -> tuple[int, str, str]:
+    p = subprocess.run(
+        [sys.executable, str(VALIDATOR), "--root", str(root), *extra],
+        capture_output=True, text=True,
+    )
+    return p.returncode, p.stdout, p.stderr
+
+
+def copy_repo(dst: Path) -> Path:
+    shutil.copytree(
+        REPO, dst,
+        ignore=shutil.ignore_patterns(".git", "__pycache__"),
+        dirs_exist_ok=True,
+    )
+    return dst
+
+
+def patch_manifest(root: Path, mutate) -> None:
+    mf = root / PLUGIN_DIR / "plugin.json"
+    m = json.loads(mf.read_text(encoding="utf-8"))
+    mutate(m)
+    mf.write_text(json.dumps(m, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+CASES: list[tuple[str, str, callable]] = []
+
+
+def case(name: str, expect: str):
+    """注册一个「必须被拦住」的反例，expect = 报错里应出现的关键字。"""
+    def deco(fn):
+        CASES.append((name, expect, fn))
+        return fn
+    return deco
+
+
+@case("篡改文件内容但没更新 sha256", "sha256 与清单不符")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m["files"][1].update(
+        sha256="0" * 64,
+    ))
+
+
+@case("entry 没登记在 files 里", "没有登记在 files 里")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m.update(entry="other.py"))
+    (root / PLUGIN_DIR / "other.py").write_text("print(1)\n", encoding="utf-8")
+
+
+@case("entry 指向不存在的文件", "文件不存在")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m["files"].append({"path": "gone.py"}))
+
+
+@case("权限名不在白名单里", "权限名不在白名单里")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m.update(permissions=["fonts:read"]))
+
+
+@case("路径穿越", "路径不安全")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m["files"].append({"path": "../evil.py"}))
+
+
+@case("目录里有未登记的文件", "未登记在 files 里的文件")
+def _(root: Path) -> None:
+    (root / PLUGIN_DIR / "hidden.py").write_text("print('payload')\n", encoding="utf-8")
+
+
+@case("可执行文件类型", "不在白名单里")
+def _(root: Path) -> None:
+    (root / PLUGIN_DIR / "dropper.exe").write_bytes(b"MZ" + b"\0" * 64)
+    patch_manifest(root, lambda m: m["files"].append({"path": "dropper.exe"}))
+
+
+@case("目录名与 id__author 不一致", "目录名必须等于")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m.update(author="bob"))
+
+
+@case("id 不合法", "id 不合法")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m.update(id="Bad_ID"))
+
+
+@case("社区件谎报 official", "不许声明 official=true")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m.update(official=True))
+
+
+@case("brief 超长", "brief 必须是")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m.update(brief="长" * 201))
+
+
+@case("单文件超过 10MB", "单文件")
+def _(root: Path) -> None:
+    big = root / PLUGIN_DIR / "big.bin"
+    big.write_bytes(b"\0" * (10 * 1024 * 1024 + 1))
+    patch_manifest(root, lambda m: m["files"].append({"path": "big.bin"}))
+
+
+@case("缺 entry 字段", "清单缺字段")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m.pop("entry"))
+
+
+def author_cases() -> list[tuple[str, bool, str]]:
+    """作者归属：非维护者只能改自己的目录。返回 (说明, 应通过?, author)。"""
+    return [
+        ("非维护者改别人的目录 → 拦", False, "alice"),
+        ("目录主人自己改 → 放行", True, "anonymous-7f3a"),
+        ("维护者改任何目录 → 放行", True, "706972745"),
+    ]
+
+
+def main() -> int:
+    failures: list[str] = []
+
+    # ── 正例 ──
+    with tempfile.TemporaryDirectory() as tmp:
+        root = copy_repo(Path(tmp) / "repo")
+        code, out, err = run(root)
+        if code != 0:
+            failures.append(f"正例（当前仓库）应当通过，实际失败：\n{err}")
+        else:
+            print(f"ok  正例：当前仓库通过（{out.strip().splitlines()[0]}）")
+
+    # ── 反例 ──
+    for name, expect, mutate in CASES:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = copy_repo(Path(tmp) / "repo")
+            mutate(root)
+            code, _out, err = run(root)
+            if code == 0:
+                failures.append(f"反例「{name}」没被拦住（退出码 0）")
+            elif expect not in err:
+                failures.append(f"反例「{name}」拦住了，但报错里没有「{expect}」：\n{err}")
+            else:
+                print(f"ok  反例：{name}")
+
+    # ── 作者归属（要 git 历史，单独建仓）──
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "repo"
+        copy_repo(work)
+        git = ["git", "-C", str(work)]
+        subprocess.run([*git, "init", "-q"], check=True)
+        subprocess.run([*git, "config", "user.email", "t@example.com"], check=True)
+        subprocess.run([*git, "config", "user.name", "t"], check=True)
+        subprocess.run([*git, "add", "-A"], check=True)
+        subprocess.run([*git, "commit", "-qm", "base"], check=True)
+        # 第二笔提交：改 spec-counter（属 anonymous-7f3a）的内容
+        target = work / "plugins/spec-counter__anonymous-7f3a/plugin.json"
+        m = json.loads(target.read_text(encoding="utf-8"))
+        m["brief"] = m["brief"] + "（改）"
+        target.write_text(json.dumps(m, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        subprocess.run([*git, "add", "-A"], check=True)
+        subprocess.run([*git, "commit", "-qm", "edit"], check=True)
+
+        for label, should_pass, author in author_cases():
+            code, _out, err = run(work, "--author", author, "--base", "HEAD~1")
+            passed = code == 0
+            if passed != should_pass:
+                failures.append(f"作者归属「{label}」：期望{'通过' if should_pass else '拦住'}，实际相反\n{err}")
+            else:
+                print(f"ok  作者归属：{label}")
+
+    if failures:
+        print("\n自测失败：", file=sys.stderr)
+        for f in failures:
+            print(f"  - {f}", file=sys.stderr)
+        return 1
+    print(f"\n自测全部通过：1 个正例 + {len(CASES)} 个反例 + {len(author_cases())} 个归属用例")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

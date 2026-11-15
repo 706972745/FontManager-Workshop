@@ -1,0 +1,51 @@
+name: Aggregate index.json
+
+# 合并之后重算 index.json —— 上传者不需要（也不允许）手写 sha256：
+# 抄错一个字节，用户就会卡在「sha256 校验失败」，而且没人知道错在哪。
+#
+# ⚠️ 这一步要往 main 推提交。如果 main 开了分支保护（require review），
+# 必须允许 github-actions[bot] 绕过（Settings → Rules → 该规则 → Bypass list），
+# 否则这个 job 会以 403 失败 —— 失败时 index.json 不会更新，插件仍是「已合并但
+# 中心看不到」。不想给 bot 绕过权的话，把下面的 push 换成开 PR（人工点合并）。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "plugins/**"
+      - "official.json"
+      - ".github/scripts/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aggregate-index
+  cancel-in-progress: false
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # eol 守卫要读 blob 比对字节，需要完整历史
+          fetch-depth: 0
+
+      - name: 校验（index 只描述通过校验的插件）
+        run: python3 .github/scripts/validate_plugins.py --root .
+
+      - name: 重生成 index.json
+        run: python3 .github/scripts/aggregate_index.py --root .
+
+      - name: 有变化才提交
+        run: |
+          if git diff --quiet -- index.json; then
+            echo "index.json 无变化"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.json
+          git commit -m "chore(index): 由 aggregate_index.py 重生成"
+          git push
