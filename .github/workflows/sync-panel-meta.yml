@@ -1,0 +1,48 @@
+name: Sync panel-meta to release
+
+# 主程序读面板元数据的地址是 **release 资产**，不是仓库里的 raw：
+#   https://github.com/706972745/FontManager-Workshop/releases/download/v1/panel-meta.json
+# 原因是 raw 前面有 CDN（max-age=300，加查询参数绕不过），发布当天会出现
+# 「新 zip 配旧 meta」→ sha256 硬门槛直接拒装（方案 §5.1）。
+#
+# 但资产不会自己从仓库长出来：改了仓库根的 panel-meta.json 必须同步成 v1 的资产，
+# 否则那个地址是 404，用户点「下载插件中心面板」直接失败（2026-11-15 实测踩到）。
+# 这个 workflow 就是补这条链路：push 改 panel-meta.json → 自动 --clobber 上传。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "panel-meta.json"
+      # 改这个 workflow 本身也要能跑一次（首次补资产就是靠这条触发的）
+      - ".github/workflows/sync-panel-meta.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 校验 meta 与 zip 资产是否配套
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          want=$(python3 -c "import json;print(json.load(open('panel-meta.json'))['sha256'])")
+          echo "仓库里的 panel-meta sha256: $want"
+          # 拉 zip 资产算 sha：meta 说 A、zip 是 B 的话，用户装的时候会被硬门槛拒掉
+          gh release download v1 --pattern 'workshop-panel.zip' --dir /tmp/rel --clobber
+          got=$(sha256sum /tmp/rel/workshop-panel.zip | cut -d' ' -f1)
+          echo "release 里 zip 的实际 sha256: $got"
+          if [ "$want" != "$got" ]; then
+            echo "::error::panel-meta.json 的 sha256 与 release v1 的 workshop-panel.zip 不一致 —— 上传了也装不上。先把 zip 重新发到 v1，再改 panel-meta.json。"
+            exit 1
+          fi
+
+      - name: 上传为 release v1 资产
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload v1 panel-meta.json --clobber
