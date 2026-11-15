@@ -3,10 +3,17 @@ name: Aggregate index.json
 # 合并之后重算 index.json —— 上传者不需要（也不允许）手写 sha256：
 # 抄错一个字节，用户就会卡在「sha256 校验失败」，而且没人知道错在哪。
 #
-# ⚠️ 这一步要往 main 推提交。如果 main 开了分支保护（require review），
-# 必须允许 github-actions[bot] 绕过（Settings → Rules → 该规则 → Bypass list），
-# 否则这个 job 会以 403 失败 —— 失败时 index.json 不会更新，插件仍是「已合并但
-# 中心看不到」。不想给 bot 绕过权的话，把下面的 push 换成开 PR（人工点合并）。
+# ⚠️ main 开了 required PR 以后，这个 job 默认**推不上去**：
+# 个人账号下的仓库不允许把 GitHub Actions 加进 ruleset 的 bypass 名单
+# （API 报 422「Actor GitHub Actions integration must be part of the ruleset
+# source or owner organization」，网页 Add bypass 里也搜不到），所以 GITHUB_TOKEN
+# 的 push 会被 required PR 拦下。
+#
+# 两条路，本文件都兜住：
+#   ① 配了 `AGGREGATE_PAT`（仓库 Settings → Secrets → Actions）→ 用它推，
+#      令牌属于管理员账号，命中 bypass 里的 Repository admin，直接进 main，全自动；
+#   ② 没配 → GITHUB_TOKEN 推失败 → **自动改开一个 PR**，人工点合并。
+#      绝不静默失败：失败时 index.json 不更新，插件会「已合并但中心看不到」。
 on:
   push:
     branches: [main]
@@ -18,6 +25,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: aggregate-index
@@ -39,6 +47,9 @@ jobs:
         run: python3 .github/scripts/aggregate_index.py --root .
 
       - name: 有变化才提交
+        env:
+          # 配了 PAT 就用 PAT（管理员 → 可绕过 required PR）；没配退回 GITHUB_TOKEN
+          GH_TOKEN: ${{ secrets.AGGREGATE_PAT || github.token }}
         run: |
           if git diff --quiet -- index.json; then
             echo "index.json 无变化"
@@ -48,4 +59,24 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.json
           git commit -m "chore(index): 由 aggregate_index.py 重生成"
-          git push
+
+          if git push; then
+            echo "index.json 已直接推送到 main"
+            exit 0
+          fi
+
+          # 推不上去（没配 PAT，或 PAT 也不是管理员）→ 开 PR，让维护者点一下
+          BRANCH="chore/index-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(index): 重生成 index.json" \
+            --body "合并插件后由 CI 自动重算的 index.json（含逐文件 sha256）。
+
+本仓库的 main 开了 required PR，而 GitHub Actions 无法加进 bypass 名单（个人账号限制），所以这里改成开 PR。
+**合并这个 PR 之后新插件才会出现在插件中心里。**
+
+想让它全自动：仓库 Settings → Secrets and variables → Actions 新建 \`AGGREGATE_PAT\`，
+值填一个属于管理员账号、对本仓库有 Contents: Read and write 的令牌。"
