@@ -185,8 +185,15 @@ def main() -> int:
     out = root / "index.json"
 
     if args.check:
-        old = out.read_text(encoding="utf-8") if out.is_file() else ""
-        if old != text:
+        # 只比内容，不比 generatedAt：时间戳每次跑都不同，拿它比等于永远不一致
+        old_text = out.read_text(encoding="utf-8") if out.is_file() else ""
+        try:
+            old = json.loads(old_text)
+            old["generatedAt"] = index["generatedAt"]
+            same = dump(old) == text
+        except json.JSONDecodeError:
+            same = False
+        if not same:
             print("index.json 与目录内容不一致 —— 跑一次 aggregate_index.py 再提交", file=sys.stderr)
             return 1
         print("index.json 是最新的")
