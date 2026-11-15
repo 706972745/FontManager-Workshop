@@ -1,0 +1,23 @@
+{
+  "id": "zz-selftest-7k5l",
+  "name": "CI 自测插件",
+  "brief": "由发版前的端到端自测生成，会被立刻关闭，不会合并。",
+  "detail": "这个目录用于验证「面板上传 → PR → CI 校验」这条链路，跑完就会被删除。",
+  "author": "706972745",
+  "version": "0.0.1",
+  "entry": "main.py",
+  "apiLevel": 1,
+  "permissions": [],
+  "runtime": "python",
+  "lang": "zh-CN",
+  "official": false,
+  "uploadedAt": "2026-11-15T05:27:17Z",
+  "files": [
+    {
+      "path": "main.py"
+    },
+    {
+      "path": "plugin.json"
+    }
+  ]
+}
