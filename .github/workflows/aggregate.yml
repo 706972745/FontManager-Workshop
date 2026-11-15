@@ -73,10 +73,4 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "chore(index): 重生成 index.json" \
-            --body "合并插件后由 CI 自动重算的 index.json（含逐文件 sha256）。
-
-本仓库的 main 开了 required PR，而 GitHub Actions 无法加进 bypass 名单（个人账号限制），所以这里改成开 PR。
-**合并这个 PR 之后新插件才会出现在插件中心里。**
-
-想让它全自动：仓库 Settings → Secrets and variables → Actions 新建 \`AGGREGATE_PAT\`，
-值填一个属于管理员账号、对本仓库有 Contents: Read and write 的令牌。"
+            --body "main 开了 required PR，Actions 无法绕过（个人账号限制），所以改开 PR。合并后新插件才会出现在插件中心。"
