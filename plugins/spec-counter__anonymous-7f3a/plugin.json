@@ -8,7 +8,7 @@
   "entry": "count.py",
   "apiLevel": 1,
   "permissions": [
-    "fonts:read"
+    "read:fonts"
   ],
   "runtime": "python",
   "minAppVersion": "2.1.7",

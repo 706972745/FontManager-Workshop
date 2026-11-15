@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-14T22:50:00Z",
+  "generatedAt": "2026-11-15T00:30:00Z",
   "official": [
     {
       "id": "font-sync",
@@ -82,8 +82,8 @@
       "author": "alice",
       "version": "1.0.0",
       "permissions": [
-        "fonts:read",
-        "fonts:write"
+        "read:fonts",
+        "write:fonts"
       ],
       "runtime": null,
       "minAppVersion": "2.1.7",
@@ -93,7 +93,7 @@
       "files": [
         {
           "path": "plugin.json",
-          "sha256": "629ce09e11391648e0364d01baced9efdaacd4464a8d5a713bab7dc0110994b0",
+          "sha256": "4746a0566f3d4ca300639ebccaed3e98b468e039025c66305c99a400b6a93267",
           "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/font-renamer__alice/plugin.json",
           "size": 723
         },
@@ -104,7 +104,8 @@
           "size": 1551
         }
       ],
-      "dir": "plugins/font-renamer__alice"
+      "dir": "plugins/font-renamer__alice",
+      "size": 2274
     },
     {
       "id": "spec-counter",
@@ -114,7 +115,7 @@
       "author": "anonymous-7f3a",
       "version": "0.3.0",
       "permissions": [
-        "fonts:read"
+        "read:fonts"
       ],
       "runtime": "python",
       "minAppVersion": "2.1.7",
@@ -130,12 +131,13 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "1705d3124da83205f5f3bbf2a11a049ee8bd325906e423da79c97c9d32fda2dd",
+          "sha256": "3bb57193a22f3255fa064c20a7986d0bbc0b204fb9d5e778789aff665f98962f",
           "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/spec-counter__anonymous-7f3a/plugin.json",
           "size": 568
         }
       ],
-      "dir": "plugins/spec-counter__anonymous-7f3a"
+      "dir": "plugins/spec-counter__anonymous-7f3a",
+      "size": 2055
     }
   ]
 }

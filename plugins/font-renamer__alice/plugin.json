@@ -8,8 +8,8 @@
   "entry": "rename.py",
   "apiLevel": 1,
   "permissions": [
-    "fonts:read",
-    "fonts:write"
+    "read:fonts",
+    "write:fonts"
   ],
   "runtime": null,
   "minAppVersion": "2.1.7",
