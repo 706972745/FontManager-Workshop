@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-15T00:31:13Z",
+  "generatedAt": "2026-11-15T00:46:00Z",
   "official": [
     {
-      "id": "font-sync",
+      "id": "com.fontmanager.font-sync",
       "name": "字体同步",
       "brief": "把字体库增量同步到你自己的 GitHub 私有仓，多台电脑自动保持一致。",
       "detail": "按字体族打包增量同步：上传 / 下载 / sha256 校验 / 自动重扫。令牌 DPAPI 加密，多账号隔离。",
@@ -17,7 +17,7 @@
       "size": 107642
     },
     {
-      "id": "font-stats",
+      "id": "com.fontmanager.example.font-stats",
       "name": "字体统计",
       "brief": "统计字体库：家族、字重、风格、版权分布，生成图表报告。",
       "detail": "对当前字体库做全量统计并生成可视化报告。",
@@ -31,7 +31,7 @@
       "size": 20000035
     },
     {
-      "id": "specimen-export",
+      "id": "com.fontmanager.example.specimen-export",
       "name": "字样导出",
       "brief": "把字体导出为字样图 / PDF 样张。",
       "detail": "选中字体族生成字样图或 PDF 样张，支持批量。",
@@ -45,7 +45,7 @@
       "size": 20018319
     },
     {
-      "id": "font-apply",
+      "id": "com.fontmanager.font-apply",
       "name": "字体应用",
       "brief": "按场景一键应用字体组合。",
       "detail": "预设场景（标题/正文/代码）一键切换启用字体组合。",
@@ -59,7 +59,7 @@
       "size": 20790
     },
     {
-      "id": "template-hello",
+      "id": "com.example.hello-plugin",
       "name": "插件模板",
       "brief": "官方插件开发模板：最小可运行插件 + 面板示例。",
       "detail": "复制本插件作为起点开发你自己的 FontManager 插件。",
