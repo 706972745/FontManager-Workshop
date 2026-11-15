@@ -55,6 +55,15 @@ jobs:
             echo "index.json 无变化"
             exit 0
           fi
+          # 聚合脚本每次都会重写 generatedAt，所以「时间戳变了」不等于「清单变了」。
+          # 不管的话：每次碰 plugins/** 都会产出一次提交（进而一个 PR），纯噪声，
+          # 而且会让维护者以为自己漏了什么。把 generatedAt 剔掉再比一次。
+          A=$(git show HEAD:index.json | jq 'del(.generatedAt)' | jq -S .)
+          B=$(jq 'del(.generatedAt)' index.json | jq -S .)
+          if [ "$A" = "$B" ]; then
+            echo "只有 generatedAt 变了，清单内容没变化 —— 跳过提交"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.json
