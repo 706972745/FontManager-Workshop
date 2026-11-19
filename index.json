@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-15T00:46:59Z",
+  "generatedAt": "2026-11-19T02:27:19Z",
   "official": [
     {
       "id": "com.fontmanager.font-sync",
@@ -9,12 +9,12 @@
       "detail": "按字体族打包增量同步：上传 / 下载 / sha256 校验 / 自动重扫。令牌 DPAPI 加密，多账号隔离。",
       "author": "official",
       "official": true,
-      "version": "0.9.3",
+      "version": "0.9.5",
       "runtime": "python",
       "minAppVersion": "1.9.2",
       "lang": "zh-CN",
-      "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/font-sync-0.9.3.zip",
-      "size": 107642
+      "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/font-sync-0.9.5.zip",
+      "size": 108520
     },
     {
       "id": "com.fontmanager.example.font-stats",
@@ -23,7 +23,7 @@
       "detail": "对当前字体库做全量统计并生成可视化报告。",
       "author": "official",
       "official": true,
-      "version": "1.0.0",
+      "version": "1.1.2",
       "runtime": "python",
       "minAppVersion": "1.9.0",
       "lang": "zh-CN",
@@ -37,7 +37,7 @@
       "detail": "选中字体族生成字样图或 PDF 样张，支持批量。",
       "author": "official",
       "official": true,
-      "version": "1.0.0",
+      "version": "1.2.2",
       "runtime": "python",
       "minAppVersion": "1.9.0",
       "lang": "zh-CN",
@@ -51,7 +51,7 @@
       "detail": "预设场景（标题/正文/代码）一键切换启用字体组合。",
       "author": "official",
       "official": true,
-      "version": "1.0.0",
+      "version": "1.1.2",
       "runtime": "python",
       "minAppVersion": "1.9.0",
       "lang": "zh-CN",
@@ -65,7 +65,7 @@
       "detail": "复制本插件作为起点开发你自己的 FontManager 插件。",
       "author": "official",
       "official": true,
-      "version": "1.0.0",
+      "version": "1.0.1",
       "runtime": null,
       "minAppVersion": "1.9.0",
       "lang": "zh-CN",
