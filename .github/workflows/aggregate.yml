@@ -39,6 +39,13 @@ jobs:
         with:
           # eol 守卫要读 blob 比对字节，需要完整历史
           fetch-depth: 0
+          # 必须在这里给 token：`git push` 用的是 checkout 存下的 http.extraheader，
+          # 只在「有变化才提交」步骤里设 GH_TOKEN 是没用的 —— 那只影响 gh 命令行。
+          # 2026-11-25 实测：配了 secret 仍然被 required PR 拦下，日志里那条
+          # `.extraheader AUTHORIZATION: basic ***` 就是 GITHUB_TOKEN 留下的。
+          # 配了 PAT（管理员身份 → 命中 ruleset 的 Repository admin bypass）就能直推；
+          # 没配则退回 GITHUB_TOKEN，照旧走下面的「改开 PR」分支。
+          token: ${{ secrets.AGGREGATE_PAT || github.token }}
 
       - name: 校验（index 只描述通过校验的插件）
         run: python3 .github/scripts/validate_plugins.py --root .
@@ -75,6 +82,7 @@ jobs:
           fi
 
           # 推不上去（没配 PAT，或 PAT 也不是管理员）→ 开 PR，让维护者点一下
+          echo "::warning::直接推送被拒：检查 AGGREGATE_PAT 是否已配置、是否带 contents:write、是否属于管理员账号"
           BRANCH="chore/index-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH"
           git push -u origin "$BRANCH"

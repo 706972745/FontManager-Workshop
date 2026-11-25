@@ -239,4 +239,3 @@ PR 没有 COM，也不支持 `-r` 跑脚本，**唯一入口是宿主内的 CEP 
 8. ID 的 ExtendScript 是 **ES3**：`String.prototype.trim` / `Array.map` 这类都不存在，写了会静默变成 `ERR:String().trim is not a function`。
 9. ID 的 `app.fonts` 不能 `for` 循环枚举（会打断脚本引擎），只按候选名 `itemByName` 试；`itemByName` 命中"占位字体"也不报错，得靠真赋值验证。
 10. 换 exe 前必须先结束 `adobe-font.exe` 进程（运行中的 exe 覆盖会 `Device or resource busy`）；Windows 下可先把它改名再放新文件，但新 exe 要等 FontManager 重新拉起插件才生效 —— 在 设置 → 插件 里把开关关掉再打开即可。
-
