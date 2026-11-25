@@ -1,0 +1,30 @@
+{
+  "id": "com.iieozo.adobe-font",
+  "name": "Adobe 套字器（全家桶）",
+  "brief": "双击字体就套到 PS / AI / ID / IC / AE / PR / CorelDRAW 当前选中的文字上，不用切窗口找字体。",
+  "detail": "FontManager 的 Adobe 全家桶套字器。",
+  "author": "helloooooseff",
+  "version": "0.3.3",
+  "entry": "adobe-font.exe",
+  "apiLevel": 1,
+  "permissions": [
+    "read:fonts",
+    "write:apply",
+    "read:apps"
+  ],
+  "runtime": null,
+  "lang": "zh-CN",
+  "official": false,
+  "uploadedAt": "2026-11-25T10:22:03Z",
+  "files": [
+    {
+      "path": "README.md"
+    },
+    {
+      "path": "adobe-font.exe"
+    },
+    {
+      "path": "plugin.json"
+    }
+  ]
+}
