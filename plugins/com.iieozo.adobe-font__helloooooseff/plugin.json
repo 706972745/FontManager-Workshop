@@ -1,0 +1,30 @@
+{
+  "id": "com.iieozo.adobe-font",
+  "name": "Adobe 套字器（全家桶）",
+  "brief": "dfs",
+  "detail": "efse",
+  "author": "helloooooseff",
+  "version": "0.3.3",
+  "entry": "adobe-font.exe",
+  "apiLevel": 1,
+  "permissions": [
+    "read:fonts",
+    "write:apply",
+    "read:apps"
+  ],
+  "runtime": null,
+  "lang": "zh-CN",
+  "official": false,
+  "uploadedAt": "2026-11-25T08:14:44Z",
+  "files": [
+    {
+      "path": "README.md"
+    },
+    {
+      "path": "adobe-font.exe"
+    },
+    {
+      "path": "plugin.json"
+    }
+  ]
+}
