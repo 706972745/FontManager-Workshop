@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-25T10:22:58Z",
+  "generatedAt": "2026-11-25T10:24:48Z",
   "official": [
     {
       "id": "com.fontmanager.font-sync",
@@ -74,46 +74,6 @@
     }
   ],
   "plugins": [
-    {
-      "id": "com.iieozo.adobe-font",
-      "name": "Adobe 套字器（全家桶）",
-      "brief": "双击字体就套到 PS / AI / ID / IC / AE / PR / CorelDRAW 当前选中的文字上，不用切窗口找字体。",
-      "detail": "FontManager 的 Adobe 全家桶套字器。",
-      "author": "helloooooseff",
-      "version": "0.3.3",
-      "permissions": [
-        "read:fonts",
-        "write:apply",
-        "read:apps"
-      ],
-      "runtime": null,
-      "minAppVersion": null,
-      "lang": "zh-CN",
-      "official": false,
-      "uploadedAt": "2026-11-25T10:22:03Z",
-      "files": [
-        {
-          "path": "README.md",
-          "sha256": "ab7b5ba389098de854a67246c0a8dc3c715aca4ba46078df587a1a6901b5206e",
-          "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/com.iieozo.adobe-font__helloooooseff/README.md",
-          "size": 15994
-        },
-        {
-          "path": "adobe-font.exe",
-          "sha256": "9b8b6e498c07fb9a10c5b472819756baca3f3cd09343aa21983600110cbf7ad7",
-          "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/com.iieozo.adobe-font__helloooooseff/adobe-font.exe",
-          "size": 451072
-        },
-        {
-          "path": "plugin.json",
-          "sha256": "5604ff3ea3ea3c6a53f42d0c0e47f40ba50fdc5cb25c6b15e6c14ec70b8e4724",
-          "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/com.iieozo.adobe-font__helloooooseff/plugin.json",
-          "size": 684
-        }
-      ],
-      "dir": "plugins/com.iieozo.adobe-font__helloooooseff",
-      "size": 467750
-    },
     {
       "id": "font-renamer",
       "name": "批量重命名",
