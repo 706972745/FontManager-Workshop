@@ -1,0 +1,30 @@
+{
+  "id": "com.iieozo.adobe-font",
+  "name": "Adobe 套字器（全家桶）",
+  "brief": "双击字体就套到 PS / AI / ID / IC / AE / PR / CorelDRAW 当前选中的文字上，不用切窗口找字体。",
+  "detail": "FontManager 的 Adobe 全家桶套字器。在速览里双击字体、或右键字族选「应用到…」，即可把字体套到目标软件当前选中的文字上。\n\n覆盖范围：\n· Photoshop / Illustrator / CorelDRAW：复用主程序套字引擎，含启用检查与缺中文提醒\n· InDesign / InCopy：插件自带 COM 通道，自动处理 ID 不认 PostScript 名的问题（微软雅黑、黑体等本地化字名）\n· After Effects：走随包 CEP 面板，在宿主内执行脚本并读回校验\n· Premiere Pro：仅支持带「字体」参数的 MOGRT 模板文字；PR 自带文字 Adobe 未开放字体属性\n\n使用方式：设置 → 插件里打开开关即可。双击行为可选「直接套用 / 先点一下目标窗口（15 秒）/ 仅复制不套用」，可固定目标软件；设置面板里能一键安装或重装 AE / PR 面板、自检 Adobe 通道。\n\n前置条件：字体需先在 FontManager 中启用；新激活的字体要重启目标软件后才能被识别。\n\n权限说明：read:fonts 读取字体清单与启用状态；write:apply 向目标软件写入字体；read:apps 识别当前前台的设计软件。\n\n已知限制：PR 自带文字工具做的文字无法换字体（Adobe 未开放）；MOGRT 模板没有字体字段时会明确提示而不是假装成功；AE / PR 需要套字桥面板处于打开状态。",
+  "author": "helloooooseff",
+  "version": "0.3.3",
+  "entry": "adobe-font.exe",
+  "apiLevel": 1,
+  "permissions": [
+    "read:fonts",
+    "write:apply",
+    "read:apps"
+  ],
+  "runtime": null,
+  "lang": "zh-CN",
+  "official": false,
+  "uploadedAt": "2026-11-25T08:43:43Z",
+  "files": [
+    {
+      "path": "README.md"
+    },
+    {
+      "path": "adobe-font.exe"
+    },
+    {
+      "path": "plugin.json"
+    }
+  ]
+}
