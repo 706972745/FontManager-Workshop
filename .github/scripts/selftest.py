@@ -79,6 +79,12 @@ def _(root: Path) -> None:
     patch_manifest(root, lambda m: m["files"].append({"path": "gone.py"}))
 
 
+@case("名称超过 15 个字", "最多 15 个字")
+def _(root: Path) -> None:
+    # 面板与这里同口径：卡片一行放不下，超过就不让上架
+    patch_manifest(root, lambda m: m.update(name="这是一个名字特别特别特别长的插件"))
+
+
 @case("权限名不在白名单里", "权限名不在白名单里")
 def _(root: Path) -> None:
     patch_manifest(root, lambda m: m.update(permissions=["fonts:read"]))

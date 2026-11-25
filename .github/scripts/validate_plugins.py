@@ -48,6 +48,10 @@ MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_PLUGIN_BYTES = 20 * 1024 * 1024
 MAX_BRIEF = 200
 MAX_DETAIL = 1000
+# 插件名称上限（显示名，不是 id）。与面板 `src/workshop/upload.ts` 的 MAX_NAME 同口径：
+# 卡片一行放不下更长的名字，列表会参差不齐。面板上传前就拦住，这里兜住手搓的 PR。
+# 按**字符数**（Python str 天然如此），中文/emoji 一个字算一个。
+MAX_NAME = 15
 
 # 与主程序 `src-tauri/src/api.rs` 的 `PERMS` **必须一致**。
 # 两边不同步的后果：这里放过的权限名运行时会被 sanitize_plugin_perms 丢掉，
@@ -186,6 +190,8 @@ def validate_one(root: Path, pdir: Path, rep: Report) -> None:
         rep.err(where, f"author 不合法（GitHub 登录名或 anonymous-xxxx）：{author!r}")
     if not isinstance(m["name"], str) or not m["name"].strip():
         rep.err(where, "name 不能为空")
+    elif len(m["name"].strip()) > MAX_NAME:
+        rep.err(where, f"name 最多 {MAX_NAME} 个字（现在 {len(m['name'].strip())} 个）")
     if not isinstance(m["brief"], str) or len(m["brief"]) > MAX_BRIEF:
         rep.err(where, f"brief 必须是 ≤{MAX_BRIEF} 字的字符串")
     if not isinstance(m["detail"], str) or len(m["detail"]) > MAX_DETAIL:
