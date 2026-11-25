@@ -1,0 +1,17 @@
+{
+  "id": "fm-delete-selftest2",
+  "name": "下架自测②（临时）",
+  "brief": "验证「开下架 PR」这条路，用完即删。",
+  "detail": "由 FontManager 下架流程自测脚本创建，PR 验证后关闭并清理。",
+  "author": "706972745",
+  "version": "0.0.1",
+  "entry": "noop.py",
+  "apiLevel": 1,
+  "permissions": [],
+  "runtime": "python",
+  "lang": "zh-CN",
+  "files": [
+    "noop.py",
+    "plugin.json"
+  ]
+}
