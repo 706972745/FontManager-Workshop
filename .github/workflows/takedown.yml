@@ -1,0 +1,127 @@
+name: Takedown (author self-service)
+
+# 作者自助下架：`[remove]` PR 校验通过后**直接生效**，不需要维护者点合并。
+#
+# 为什么需要它：main 开了 required review，作者（非协作者）永远合不了自己的下架 PR，
+# 插件的「下架」按钮实际等于「提交一个没人处理的请求」——用户看到的就是「没有权限」。
+#
+# 安全边界（四道闸，缺一不可）：
+#   1. head 必须是 **PR 作者自己的 fork**（不能从任意仓库推删除 PR）；
+#   2. 所有变更必须是 `removed`（不许夹带新增/修改，否则等于绕过上传审核）；
+#   3. 每个路径必须是 `plugins/<id>__<作者>/…`，且 `<作者>` 忽略大小写等于 PR 作者；
+#   4. 删除的目录必须真实存在于 main（防空 PR 把别人的目录当目标）。
+# 通过后由 AGGREGATE_PAT（管理员身份，命中 ruleset 的 Repository admin bypass）
+# 直接把目录从 main 上删掉，评论 + 关闭 PR。任何一条不过 → 评论原因 + 关闭，
+# 绝不放行；维护者仍可在网页/面板删任何插件。
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: takedown-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  takedown:
+    if: startsWith(github.event.pull_request.title, '[remove]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          # 没有配 PAT 时退回 GITHUB_TOKEN：能校验、能评论，但推不动 main
+          # （个人仓库不允许把 Actions 加进 ruleset bypass），此时只给结论不执行。
+          github-token: ${{ secrets.AGGREGATE_PAT || github.token }}
+          script: |
+            const { owner, repo } = context.repo
+            const pr = context.payload.pull_request
+            const num = pr.number
+            const author = pr.user.login.toLowerCase()
+            const problems = []
+
+            // ① head 必须是作者自己的 fork
+            if (!pr.head.repo || !pr.head.repo.fork ||
+                (pr.head.repo.owner.login || '').toLowerCase() !== author) {
+              problems.push(`PR 必须来自 @${author} 自己的 fork`)
+            }
+
+            // ②③ 全部是删除，且每个路径都属于作者
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: num, per_page: 100,
+            })
+            if (files.length === 0) problems.push('这个 PR 没有任何文件变更')
+            const dirs = new Set()
+            for (const f of files) {
+              if (f.status !== 'removed') {
+                problems.push(`${f.filename}：不是删除（下架 PR 里不许夹带新增/修改）`)
+                continue
+              }
+              const m = /^plugins\/([^/]+)\//.exec(f.filename)
+              if (!m) {
+                problems.push(`${f.filename}：不在 plugins/ 下`)
+                continue
+              }
+              const dir = m[1]
+              const cut = dir.lastIndexOf('__')
+              if (cut < 0 || dir.slice(cut + 2).toLowerCase() !== author) {
+                problems.push(`${f.filename}：不属于 @${author}（目录名后缀必须是作者登录名）`)
+              }
+              dirs.add(dir)
+            }
+
+            const say = async (body) => {
+              await github.rest.issues.createComment({ owner, repo, issue_number: num, body })
+            }
+            const reject = async (why) => {
+              await say(`**没有执行下架**：\n\n${why.map((w) => `- ${w}`).join('\n')}\n\n` +
+                '下架 PR 只允许删除 `plugins/<插件>__<你的登录名>/` 下的文件，' +
+                '且不能夹带任何其它改动。需要人工处理请直接联系维护者。')
+              await github.rest.pulls.update({ owner, repo, pull_number: num, state: 'closed' })
+            }
+
+            if (problems.length > 0) return reject(problems)
+
+            // ④ 目录必须真实存在于 main
+            const mainRef = await github.rest.git.getRef({ owner, repo, ref: 'heads/main' })
+            const baseSha = mainRef.data.object.sha
+            const baseCommit = await github.rest.git.getCommit({ owner, repo, commit_sha: baseSha })
+            const baseTree = baseCommit.data.tree.sha
+            const flat = await github.rest.git.getTree({ owner, repo, tree_sha: baseTree, recursive: 'true' })
+            if (flat.data.truncated) {
+              return reject(['仓库文件树过大，无法在一次请求里校验 —— 请联系维护者手动下架'])
+            }
+            const targets = flat.data.tree.filter(
+              (e) => e.type === 'blob' && [...dirs].some((d) => e.path.startsWith(`plugins/${d}/`)),
+            )
+            if (targets.length === 0) {
+              // 目录已经不在了（重复触发 / 已经被维护者删掉）→ 关闭 PR，不报错
+              await say('这些目录已经不在仓库里了，视为已下架。')
+              return github.rest.pulls.update({ owner, repo, pull_number: num, state: 'closed' })
+            }
+
+            // 直接删（PAT 命中 Repository admin bypass，不受 required review 限制）
+            const tree = await github.rest.git.createTree({
+              owner, repo, base_tree: baseTree,
+              tree: targets.map((e) => ({ path: e.path, mode: '100644', type: 'blob', sha: null })),
+            })
+            const commit = await github.rest.git.createCommit({
+              owner, repo,
+              message: `${pr.title}\n\n由作者自助下架（GitHub Action 校验通过后自动执行）。`,
+              tree: tree.data.sha,
+              parents: [baseSha],
+            })
+            try {
+              await github.rest.git.updateRef({
+                owner, repo, ref: 'heads/main', sha: commit.data.sha, force: false,
+              })
+            } catch (e) {
+              // 409/422：期间有人推了 main（parent 过期）→ 让作者再点一次即可
+              return reject([`下架时仓库刚好有新提交，请稍后重新点一次下架（${e.status}）`])
+            }
+
+            await say(`已下架：\n\n${[...dirs].map((d) => `- \`plugins/${d}/\``).join('\n')}\n\n` +
+              '`index.json` 会在几十秒内重算，插件中心随之消失。此 PR 无需合并，已自动关闭。')
+            await github.rest.pulls.update({ owner, repo, pull_number: num, state: 'closed' })
