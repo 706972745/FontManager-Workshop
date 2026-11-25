@@ -30,10 +30,10 @@ python .github/scripts/selftest.py                             # 规则自测（
 | 项 | 规则 |
 |---|---|
 | 清单字段 | `id` / `name` / `brief` / `detail` / `author` / `version` / `entry` / `apiLevel` / `files` / `permissions` 必填 |
-| id | `^[a-z0-9-]{2,40}$` |
+| id | 小写字母 / 数字 / `.` / `-`，2~40 位，首尾须为字母或数字（`com.iieozo.adobe-font` 这类包名式 id 合法） |
 | 目录名 | 必须等于 `<id>__<author>` |
-| entry | 必须登记在 `files` 里、文件真实存在、后缀 `.py` / `.js`（运行时按后缀选解释器） |
-| 文件 | 相对路径、无 `..` / 盘符 / 反斜杠；必须是普通文件；后缀在白名单里 |
+| entry | 必须登记在 `files` 里、文件真实存在、后缀 `.py` / `.js` / `.exe`（`.py`/`.js` 走解释器，`.exe` 是原生插件） |
+| 文件 | 相对路径、无 `..` / 盘符 / 反斜杠；必须是普通文件；后缀在白名单里（2026-11-25 起含 `.exe` / `.dll`，不区分官方与社区） |
 | 体积 | 单文件 ≤ 10MB，整包 ≤ 20MB |
 | 权限 | 必须在主程序 `src-tauri/src/api.rs` 的 `PERMS` 里（`read:fonts` / `write:fonts` / …） |
 | 未登记文件 | 目录里不许有 `files` 之外的文件（面板的文件列表就是 `files`） |

@@ -36,7 +36,11 @@ from pathlib import Path
 
 # ── 常量（改这里 = 改 registry 规则）────────────────────────────────────
 
-ID_RE = re.compile(r"^[a-z0-9-]{2,40}$")
+# 2026-11-25：id 放开到「小写字母 / 数字 / 点 / 短横线」，2~40 位，首尾必须是字母或数字。
+# 原因：主程序里插件 id 一直用 Java 包名式写法（com.iieozo.adobe-font），
+# registry 只认 a-z0-9- 会把这类插件全部挡在门外 —— 硬要改名等于换一个插件身份
+# （安装目录名、配置、用户认知全变）。点号只允许出现在中间，`..`、首尾点一律拒。
+ID_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]{0,38}[a-z0-9])$")
 AUTHOR_RE = re.compile(r"^(?:anonymous-[0-9a-z]{4,16}|[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})$")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
@@ -62,8 +66,15 @@ PERMS = {
 }
 
 # 允许随包分发的文件类型：程序 / 清单 / 文档 / 面板资源。
-# 二进制可执行体（exe/dll/so/dylib/jar）与脚本宿主（bat/cmd/ps1/sh/vbs）一律不收：
-# 插件是「解释器 + 脚本」，不是免安装程序。
+#
+# 2026-11-25 起**接收 .exe / .dll**（原规则是「只收脚本插件」）：
+# 主程序本身早就支持 `runtime: "exe"` 的插件（`command_for` 直接起进程、stdio 走同一套
+# 文本协议），只是 registry 一直把这条路堵着，导致原生语言写的插件只能私下发 zip。
+# 放开后**不区分官方**：任何人都能提交 `.exe`，前提是清单里必须显式声明 entry、files 逐条登记，
+# 审核就靠这份声明（目录里藏未登记的文件，第 9 条照旧拒）。
+# 仍然拒收脚本宿主（bat/cmd/ps1/sh/vbs）与动态库以外的嵌入式格式：
+# 那些只会被别的文件加载，允许了用户点开的其实是「看不见的脚本」，审核无从下手。
+# 提交 .exe 的插件请在 detail 里写清可执行文件的作用，方便 AI 审核判断。
 ALLOWED_EXT = {
     ".py", ".js", ".mjs", ".cjs", ".ts",
     ".json", ".jsonc", ".yaml", ".yml", ".toml", ".ini", ".cfg",
@@ -71,10 +82,13 @@ ALLOWED_EXT = {
     ".html", ".htm", ".css", ".svg",
     ".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico",
     ".woff", ".woff2", ".ttf", ".otf",
+    # 原生插件（runtime = "exe"）：主程序直接起进程，与 .py / .js 插件走同一套 stdio 协议
+    ".exe", ".dll",
 }
 
-# 入口脚本只认解释器能直接跑的后缀（与运行时 `command_for` 对齐：.py / .js）
-ENTRY_EXT = {".py", ".js", ".mjs", ".cjs"}
+# 入口只认「宿主能直接执行」的后缀（与 `command_for` / `interpreter_kind` 对齐）：
+# .py / .js 走解释器，.exe 是原生插件（runtime 留空或写 "exe" 都行）。
+ENTRY_EXT = {".py", ".js", ".mjs", ".cjs", ".exe"}
 
 REQUIRED_KEYS = (
     "id", "name", "brief", "detail", "author", "version",
@@ -167,7 +181,7 @@ def validate_one(root: Path, pdir: Path, rep: Report) -> None:
 
     pid, author = m["id"], m["author"]
     if not isinstance(pid, str) or not ID_RE.match(pid):
-        rep.err(where, f"id 不合法（^[a-z0-9-]{{2,40}}$）：{pid!r}")
+        rep.err(where, f"id 不合法（小写字母/数字/点/短横线，2~40 位，首尾须为字母或数字）：{pid!r}")
     if not isinstance(author, str) or not AUTHOR_RE.match(author):
         rep.err(where, f"author 不合法（GitHub 登录名或 anonymous-xxxx）：{author!r}")
     if not isinstance(m["name"], str) or not m["name"].strip():
@@ -239,7 +253,7 @@ def validate_one(root: Path, pdir: Path, rep: Report) -> None:
         if entry not in listed:
             rep.err(where, f"entry「{entry}」没有登记在 files 里")
         if Path(entry).suffix.lower() not in ENTRY_EXT:
-            rep.err(where, f"entry「{entry}」后缀必须是 .py / .js（运行时按后缀选解释器）")
+            rep.err(where, f"entry「{entry}」后缀必须是 .py / .js / .exe（宿主按后缀决定用解释器还是直接执行）")
         if not (pdir / entry).is_file():
             rep.err(where, f"entry「{entry}」文件不存在")
 
