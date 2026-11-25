@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-25T08:48:36Z",
+  "generatedAt": "2026-11-25T09:02:20Z",
   "official": [
     {
       "id": "com.fontmanager.font-sync",
@@ -94,9 +94,9 @@
       "files": [
         {
           "path": "README.md",
-          "sha256": "ab7b5ba389098de854a67246c0a8dc3c715aca4ba46078df587a1a6901b5206e",
+          "sha256": "dddbc6825d8d7dc757bd641271f12744a66af5076d35b7d686d63da8da82d002",
           "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/com.iieozo.adobe-font__helloooooseff/README.md",
-          "size": 15994
+          "size": 15996
         },
         {
           "path": "adobe-font.exe",
@@ -112,7 +112,7 @@
         }
       ],
       "dir": "plugins/com.iieozo.adobe-font__helloooooseff",
-      "size": 469091
+      "size": 469093
     },
     {
       "id": "font-renamer",
