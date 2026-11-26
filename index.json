@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-26T02:26:11Z",
+  "generatedAt": "2026-11-26T07:04:11Z",
   "official": [
     {
-      "id": "com.fontmanager.font-sync",
+      "id": "FM-FONT-SYNC",
       "name": "字体同步",
       "brief": "把字体库增量同步到你自己的 GitHub 私有仓，多台电脑自动保持一致。",
       "detail": "按字体族打包增量同步：上传 / 下载 / sha256 校验 / 自动重扫。令牌 DPAPI 加密，多账号隔离。",
@@ -13,11 +13,11 @@
       "runtime": "python",
       "minAppVersion": "1.9.2",
       "lang": "zh-CN",
-      "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/font-sync-0.9.5.zip",
+      "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-FONT-SYNC.zip",
       "size": 108520
     },
     {
-      "id": "com.fontmanager.example.font-stats",
+      "id": "FM-FONT-STAT",
       "name": "字体统计",
       "brief": "统计字体库：家族、字重、风格、版权分布，生成图表报告。",
       "detail": "对当前字体库做全量统计并生成可视化报告。",
@@ -27,11 +27,11 @@
       "runtime": "python",
       "minAppVersion": "1.9.0",
       "lang": "zh-CN",
-      "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/font-stats.zip",
+      "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-FONT-STAT.zip",
       "size": 20000035
     },
     {
-      "id": "com.fontmanager.example.specimen-export",
+      "id": "FM-FONT-SPEC",
       "name": "字样导出",
       "brief": "把字体导出为字样图 / PDF 样张。",
       "detail": "选中字体族生成字样图或 PDF 样张，支持批量。",
@@ -41,11 +41,11 @@
       "runtime": "python",
       "minAppVersion": "1.9.0",
       "lang": "zh-CN",
-      "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/specimen-export.zip",
+      "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-FONT-SPEC.zip",
       "size": 20018319
     },
     {
-      "id": "com.fontmanager.font-apply",
+      "id": "FM-FONT-APPLY",
       "name": "字体应用",
       "brief": "按场景一键应用字体组合。",
       "detail": "预设场景（标题/正文/代码）一键切换启用字体组合。",
@@ -55,11 +55,11 @@
       "runtime": "python",
       "minAppVersion": "1.9.0",
       "lang": "zh-CN",
-      "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/font-apply.zip",
+      "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-FONT-APPLY.zip",
       "size": 20790
     },
     {
-      "id": "com.example.hello-plugin",
+      "id": "FM-DEMO-HELLO",
       "name": "插件模板",
       "brief": "官方插件开发模板：最小可运行插件 + 面板示例。",
       "detail": "复制本插件作为起点开发你自己的 FontManager 插件。",
@@ -69,13 +69,45 @@
       "runtime": null,
       "minAppVersion": "1.9.0",
       "lang": "zh-CN",
-      "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/template-hello.zip",
+      "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-DEMO-HELLO.zip",
       "size": 4268
     }
   ],
   "plugins": [
     {
-      "id": "font-renamer",
+      "id": "FM-FONT-COUNT",
+      "name": "字数统计",
+      "brief": "统计字体库字符覆盖率，导出 CSV。",
+      "detail": "扫描字体 cmap，统计指定文本的字符覆盖率，导出 CSV 报告。",
+      "author": "anonymous-7f3a",
+      "version": "0.3.0",
+      "permissions": [
+        "read:fonts"
+      ],
+      "runtime": "python",
+      "minAppVersion": "2.1.7",
+      "lang": "zh-CN",
+      "official": false,
+      "uploadedAt": "2026-11-14T15:00:00Z",
+      "files": [
+        {
+          "path": "count.py",
+          "sha256": "1345f87d8682b217312d11ee1f29e654dfc2dd871fe9bccf06df36e54596bf97",
+          "url": "https://raw.githubusercontent.com/706972745/Manager-Workshop/main/plugins/FM-FONT-COUNT__anonymous-7f3a/count.py",
+          "size": 1488
+        },
+        {
+          "path": "plugin.json",
+          "sha256": "dc102bff7cbba3fd5469e31ab0cdd2ed2a55c554942212e91b8444b7ed5f28be",
+          "url": "https://raw.githubusercontent.com/706972745/Manager-Workshop/main/plugins/FM-FONT-COUNT__anonymous-7f3a/plugin.json",
+          "size": 569
+        }
+      ],
+      "dir": "plugins/FM-FONT-COUNT__anonymous-7f3a",
+      "size": 2057
+    },
+    {
+      "id": "FM-FONT-RENAME",
       "name": "批量重命名",
       "brief": "按规则批量重命名字体族：前缀、后缀、序号、正则替换。",
       "detail": "对当前字体库中的字体族批量重命名。\n支持：加前缀/后缀、序号填充、正则替换、预览 diff 后再应用。\n所有改动写入主程序字体库，可撤销。",
@@ -93,51 +125,19 @@
       "files": [
         {
           "path": "plugin.json",
-          "sha256": "4746a0566f3d4ca300639ebccaed3e98b468e039025c66305c99a400b6a93267",
-          "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/font-renamer__alice/plugin.json",
-          "size": 723
+          "sha256": "09fcf2fb1ed81a58d4f23c09821bcd58d35661b764bf687a2c8c8bd43ca8f205",
+          "url": "https://raw.githubusercontent.com/706972745/Manager-Workshop/main/plugins/FM-FONT-RENAME__alice/plugin.json",
+          "size": 725
         },
         {
           "path": "rename.py",
-          "sha256": "9054bdfa26efdc36bb6f801bac22e6d1bad0f9470ff90b834761566698d701b2",
-          "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/font-renamer__alice/rename.py",
-          "size": 1551
+          "sha256": "89667eed25567e32275bb24ccabb964aeec62a2fc0dc316bd62df2cda12fa01e",
+          "url": "https://raw.githubusercontent.com/706972745/Manager-Workshop/main/plugins/FM-FONT-RENAME__alice/rename.py",
+          "size": 1553
         }
       ],
-      "dir": "plugins/font-renamer__alice",
-      "size": 2274
-    },
-    {
-      "id": "spec-counter",
-      "name": "字数统计",
-      "brief": "统计字体库字符覆盖率，导出 CSV。",
-      "detail": "扫描字体 cmap，统计指定文本的字符覆盖率，导出 CSV 报告。",
-      "author": "anonymous-7f3a",
-      "version": "0.3.0",
-      "permissions": [
-        "read:fonts"
-      ],
-      "runtime": "python",
-      "minAppVersion": "2.1.7",
-      "lang": "zh-CN",
-      "official": false,
-      "uploadedAt": "2026-11-14T15:00:00Z",
-      "files": [
-        {
-          "path": "count.py",
-          "sha256": "f42849a9d88824a59cda418070f0d7fd6cf88642e1cd8b77eca86d5fa859e575",
-          "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/spec-counter__anonymous-7f3a/count.py",
-          "size": 1487
-        },
-        {
-          "path": "plugin.json",
-          "sha256": "3bb57193a22f3255fa064c20a7986d0bbc0b204fb9d5e778789aff665f98962f",
-          "url": "https://raw.githubusercontent.com/706972745/FontManager-Workshop/main/plugins/spec-counter__anonymous-7f3a/plugin.json",
-          "size": 568
-        }
-      ],
-      "dir": "plugins/spec-counter__anonymous-7f3a",
-      "size": 2055
+      "dir": "plugins/FM-FONT-RENAME__alice",
+      "size": 2278
     }
   ]
 }

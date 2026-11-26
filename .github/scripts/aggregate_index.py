@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
-"""FontManager-Workshop registry · index.json 聚合。
+"""插件库 registry · 清单聚合（FontManager / AssetManager 共用）。
 
-`index.json` 是客户端**唯一**请求的文件（方案 §5），以前靠手写：新增一个插件就得
-手抄 sha256 与体积，抄错一个字节 → 用户装不上（sha256 是硬门槛），而且没人会发现
-错在哪。这里改成「从目录算出来」：
+两类产物，结构完全一致（`version` / `generatedAt` / `official` / `plugins`）：
+
+    index.json        全量（跨软件）：给维护者看，也兼容只认全量清单的旧客户端
+    by-app/fm.json    只含 FM-* 条目 —— FontManager 客户端唯一请求的文件
+    by-app/am.json    只含 AM-* 条目 —— AssetManager 客户端唯一请求的文件
+
+以前 `index.json` 靠手写：新增一个插件就得手抄 sha256 与体积，抄错一个字节 →
+用户装不上（sha256 是硬门槛），而且没人会发现错在哪。这里改成「从目录算出来」：
 
     plugins/<id>__<author>/plugin.json  ──┐
-    official.json（官方区，手工维护）    ──┼──> index.json
+    official.json（官方区，手工维护）    ──┼──> index.json + by-app/<前缀>.json
     sha256 / 体积 / 直链（从磁盘算）      ──┘
+
+某个前缀一条都没有时**也要写**该切片（空数组）：客户端固定请求这个路径，
+文件不存在就是 404，插件中心直接空着。
 
 用法：
   python .github/scripts/aggregate_index.py --root .
   python .github/scripts/aggregate_index.py --root . --check   # 只比对，不写（CI 用）
+
+`--check` 会把 index.json 与每份 by-app/*.json 都比一遍 —— 只比 index.json 的话，
+改了插件但切片没更新时脚本会误报「是最新的」。
 
 确定性：条目按 id 排序；`generatedAt` 取 `--now` 或 `SOURCE_DATE_EPOCH`，
 都不给才用当前时间 —— 同样的输入重复跑，除 `generatedAt` 外输出逐字节一致。
@@ -28,10 +39,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_prefixes as ap  # noqa: E402  前缀表只此一份
 import validate_plugins as vp  # noqa: E402  同一份规则，不复制一遍
 
-DEFAULT_REPO = "706972745/FontManager-Workshop"
+DEFAULT_REPO = "706972745/Manager-Workshop"
 DEFAULT_BRANCH = "main"
+SLICE_DIR = "by-app"
 
 
 def raw_url(repo: str, branch: str, path: str) -> str:
@@ -135,12 +148,42 @@ def build_index(root: Path, repo: str, branch: str, now: str) -> dict:
     if dup:
         raise SystemExit(f"id 重复（官方区与社区区不能同名）：{', '.join(dup)}")
 
+    # 官方件同样受前缀闸门约束。前缀不在表里的条目**永远进不了任何切片** ——
+    # 客户端根本看不到它。与其静默吞掉，不如聚合时直接报错。
+    bad = sorted(e["id"] for e in official if not ap.is_valid_id(e["id"]))
+    if bad:
+        raise SystemExit(
+            f"官方件 id 不合规（前缀必须是 {ap.prefixes_hint()}，"
+            f"整串 ≤ {ap.MAX_ID_LEN} 字符）：{', '.join(bad)}"
+        )
+
     return {
         "version": 1,
         "generatedAt": now,
         "official": official,
         "plugins": plugins,
     }
+
+
+def slice_index(index: dict, prefix: str) -> dict:
+    """按 id 前缀切一份清单，结构与 index.json 完全一致。"""
+    def keep(entry: dict) -> bool:
+        return ap.prefix_of(entry.get("id")) == prefix
+
+    return {
+        "version": index["version"],
+        "generatedAt": index["generatedAt"],
+        "official": [e for e in index["official"] if keep(e)],
+        "plugins": [e for e in index["plugins"] if keep(e)],
+    }
+
+
+def outputs(root: Path, index: dict) -> list[tuple[Path, dict]]:
+    """全量 + 每个前缀一份切片（某前缀没条目时仍然写空数组）。"""
+    out = [(root / "index.json", index)]
+    for prefix in ap.APP_PREFIXES:
+        out.append((root / SLICE_DIR / f"{prefix.lower()}.json", slice_index(index, prefix)))
+    return out
 
 
 def dump(index: dict) -> str:
@@ -181,29 +224,48 @@ def main() -> int:
             now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     index = build_index(root, args.repo, args.branch, now)
-    text = dump(index)
-    out = root / "index.json"
+    planned = outputs(root, index)
+
+    def same_file(path: Path, obj: dict) -> bool:
+        """内容是否一致 —— 不比 generatedAt：时间戳每次跑都不同，拿它比等于永远不一致。"""
+        if not path.is_file():
+            return False
+        try:
+            old = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return False
+        if not isinstance(old, dict):
+            return False
+        old["generatedAt"] = obj["generatedAt"]
+        return dump(old) == dump(obj)
 
     if args.check:
-        # 只比内容，不比 generatedAt：时间戳每次跑都不同，拿它比等于永远不一致
-        old_text = out.read_text(encoding="utf-8") if out.is_file() else ""
-        try:
-            old = json.loads(old_text)
-            old["generatedAt"] = index["generatedAt"]
-            same = dump(old) == text
-        except json.JSONDecodeError:
-            same = False
-        if not same:
-            print("index.json 与目录内容不一致 —— 跑一次 aggregate_index.py 再提交", file=sys.stderr)
+        stale = [p for p, obj in planned if not same_file(p, obj)]
+        if stale:
+            names = "、".join(p.relative_to(root).as_posix() for p in stale)
+            print(f"{names} 与目录内容不一致 —— 跑一次 aggregate_index.py 再提交", file=sys.stderr)
             return 1
-        print("index.json 是最新的")
+        print("index.json 与 by-app/*.json 都是最新的")
         return 0
 
-    out.write_text(text, encoding="utf-8")
+    written = 0
+    for path, obj in planned:
+        data = dump(obj).encode("utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # write_bytes 而不是 write_text：Windows 上文本模式会把 \n 翻成 \r\n，
+        # 同一份输入在 CI(Linux) 与本地产出的字节就不同，aggregate.yml 会一直以为清单变了。
+        path.write_bytes(data)
+        written += len(data)
+
     print(
-        f"已写入 {out}：官方 {len(index['official'])} 条，社区 {len(index['plugins'])} 条，"
-        f"{len(text.encode('utf-8'))} 字节"
+        f"已写入 index.json + {len(planned) - 1} 份切片：官方 {len(index['official'])} 条，"
+        f"社区 {len(index['plugins'])} 条，共 {written} 字节"
     )
+    for path, obj in planned[1:]:
+        print(
+            f"  {path.relative_to(root).as_posix()}: 官方 {len(obj['official'])} 条，"
+            f"社区 {len(obj['plugins'])} 条"
+        )
     for e in index["plugins"]:
         print(f"  {e['id']:<20} {e['author']:<18} v{e['version']:<8} {len(e['files'])} 文件 {e['size']} 字节")
     return 0

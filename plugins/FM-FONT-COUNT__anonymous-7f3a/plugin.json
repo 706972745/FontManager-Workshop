@@ -1,5 +1,5 @@
 {
-  "id": "spec-counter",
+  "id": "FM-FONT-COUNT",
   "name": "字数统计",
   "brief": "统计字体库字符覆盖率，导出 CSV。",
   "detail": "扫描字体 cmap，统计指定文本的字符覆盖率，导出 CSV 报告。",

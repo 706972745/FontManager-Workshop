@@ -1,6 +1,7 @@
-name: Aggregate index.json
+name: Aggregate index.json + by-app slices
 
-# 合并之后重算 index.json —— 上传者不需要（也不允许）手写 sha256：
+# 合并之后重算 index.json（全量）与 by-app/<前缀>.json（按软件切片）——
+# 上传者不需要（也不允许）手写 sha256：
 # 抄错一个字节，用户就会卡在「sha256 校验失败」，而且没人知道错在哪。
 #
 # ⚠️ main 开了 required PR 以后，这个 job 默认**推不上去**：
@@ -50,7 +51,7 @@ jobs:
       - name: 校验（index 只描述通过校验的插件）
         run: python3 .github/scripts/validate_plugins.py --root .
 
-      - name: 重生成 index.json
+      - name: 重生成 index.json 与 by-app 切片
         run: python3 .github/scripts/aggregate_index.py --root .
 
       - name: 有变化才提交
@@ -58,26 +59,35 @@ jobs:
           # 配了 PAT 就用 PAT（管理员 → 可绕过 required PR）；没配退回 GITHUB_TOKEN
           GH_TOKEN: ${{ secrets.AGGREGATE_PAT || github.token }}
         run: |
-          if git diff --quiet -- index.json; then
-            echo "index.json 无变化"
-            exit 0
-          fi
-          # 聚合脚本每次都会重写 generatedAt，所以「时间戳变了」不等于「清单变了」。
-          # 不管的话：每次碰 plugins/** 都会产出一次提交（进而一个 PR），纯噪声，
-          # 而且会让维护者以为自己漏了什么。把 generatedAt 剔掉再比一次。
-          A=$(git show HEAD:index.json | jq 'del(.generatedAt)' | jq -S .)
-          B=$(jq 'del(.generatedAt)' index.json | jq -S .)
-          if [ "$A" = "$B" ]; then
-            echo "只有 generatedAt 变了，清单内容没变化 —— 跳过提交"
+          # 产物是 index.json（全量）+ by-app/*.json（按软件切片），两者都要跟。
+          # 只比 index.json 的话，改了插件但切片没更新时会误以为「没变化」。
+          changed=0
+          for f in index.json by-app/*.json; do
+            if [ ! -f "$f" ]; then
+              changed=1
+              continue
+            fi
+            if git cat-file -e "HEAD:$f" 2>/dev/null; then
+              A=$(git show "HEAD:$f" | jq 'del(.generatedAt)' | jq -S .)
+            else
+              A=""
+            fi
+            B=$(jq 'del(.generatedAt)' "$f" | jq -S .)
+            if [ "$A" != "$B" ]; then
+              changed=1
+            fi
+          done
+          if [ "$changed" = "0" ]; then
+            echo "清单内容没变化（只有 generatedAt 变了或完全没变）—— 跳过提交"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.json
-          git commit -m "chore(index): 由 aggregate_index.py 重生成"
+          git add index.json by-app
+          git commit -m "chore(index): 由 aggregate_index.py 重生成（含 by-app 切片）"
 
           if git push; then
-            echo "index.json 已直接推送到 main"
+            echo "index.json / by-app 已直接推送到 main"
             exit 0
           fi
 
@@ -89,5 +99,5 @@ jobs:
           gh pr create \
             --base main \
             --head "$BRANCH" \
-            --title "chore(index): 重生成 index.json" \
+            --title "chore(index): 重生成 index.json 与 by-app 切片" \
             --body "main 开了 required PR，Actions 无法绕过（个人账号限制），所以改开 PR。合并后新插件才会出现在插件中心。"

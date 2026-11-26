@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 VALIDATOR = HERE / "validate_plugins.py"
 
-PLUGIN_DIR = "plugins/font-renamer__alice"
+PLUGIN_DIR = "plugins/FM-FONT-RENAME__alice"
 
 
 def run(root: Path, *extra: str) -> tuple[int, str, str]:
@@ -79,10 +79,10 @@ def _(root: Path) -> None:
     patch_manifest(root, lambda m: m["files"].append({"path": "gone.py"}))
 
 
-@case("名称超过 15 个字", "最多 15 个字")
+@case("名称超过 25 个字", "最多 25 个字")
 def _(root: Path) -> None:
     # 面板与这里同口径：卡片一行放不下，超过就不让上架
-    patch_manifest(root, lambda m: m.update(name="这是一个名字特别特别特别长的插件"))
+    patch_manifest(root, lambda m: m.update(name="长" * 30))
 
 
 @case("权限名不在白名单里", "权限名不在白名单里")
@@ -100,10 +100,12 @@ def _(root: Path) -> None:
     (root / PLUGIN_DIR / "hidden.py").write_text("print('payload')\n", encoding="utf-8")
 
 
-@case("可执行文件类型", "不在白名单里")
+@case("脚本宿主类型（.bat）", "不在白名单里")
 def _(root: Path) -> None:
-    (root / PLUGIN_DIR / "dropper.exe").write_bytes(b"MZ" + b"\0" * 64)
-    patch_manifest(root, lambda m: m["files"].append({"path": "dropper.exe"}))
+    # .exe / .dll 自 2026-11-25 起已放开（原生插件），但 bat/cmd/ps1/sh/vbs
+    # 仍然拒收 —— 它们只会被别的文件加载，用户点开的其实是「看不见的脚本」。
+    (root / PLUGIN_DIR / "dropper.bat").write_bytes(b"@echo off\n")
+    patch_manifest(root, lambda m: m["files"].append({"path": "dropper.bat"}))
 
 
 @case("目录名与 id__author 不一致", "目录名必须等于")
@@ -111,9 +113,32 @@ def _(root: Path) -> None:
     patch_manifest(root, lambda m: m.update(author="bob"))
 
 
-@case("id 不合法", "id 不合法")
+@case("id 不合法（无前缀）", "id 不合法")
 def _(root: Path) -> None:
     patch_manifest(root, lambda m: m.update(id="Bad_ID"))
+
+
+@case("id 还是旧式包名（点号）", "id 不合法")
+def _(root: Path) -> None:
+    # 旧规则放行 com.iieozo.adobe-font；新规则前缀必须是 FM / AM，点号一律拒
+    patch_manifest(root, lambda m: m.update(id="com.example.adobe-font"))
+
+
+@case("id 前缀小写", "id 不合法")
+def _(root: Path) -> None:
+    # 前缀是软件编号，必须大写：fm-xxx 与 FM-xxx 是两回事，不能混着收
+    patch_manifest(root, lambda m: m.update(id="fm-FONT-RENAME"))
+
+
+@case("id 前缀不在表里", "id 不合法")
+def _(root: Path) -> None:
+    patch_manifest(root, lambda m: m.update(id="ZZ-FONT-RENAME"))
+
+
+@case("id 超过 40 字符", "id 不合法")
+def _(root: Path) -> None:
+    # 形状合法但整串超长：长度检查不能只写在正则里（换写法时最容易漏）
+    patch_manifest(root, lambda m: m.update(id="FM-" + "A" * 20 + "-" + "B" * 18))
 
 
 @case("社区件谎报 official", "不许声明 official=true")
@@ -182,8 +207,8 @@ def main() -> int:
         subprocess.run([*git, "config", "user.name", "t"], check=True)
         subprocess.run([*git, "add", "-A"], check=True)
         subprocess.run([*git, "commit", "-qm", "base"], check=True)
-        # 第二笔提交：改 spec-counter（属 anonymous-7f3a）的内容
-        target = work / "plugins/spec-counter__anonymous-7f3a/plugin.json"
+        # 第二笔提交：改 FM-FONT-COUNT（属 anonymous-7f3a）的内容
+        target = work / "plugins/FM-FONT-COUNT__anonymous-7f3a/plugin.json"
         m = json.loads(target.read_text(encoding="utf-8"))
         m["brief"] = m["brief"] + "（改）"
         target.write_text(json.dumps(m, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -1,6 +1,6 @@
 [
   {
-    "id": "com.fontmanager.font-sync",
+    "id": "FM-FONT-SYNC",
     "name": "字体同步",
     "brief": "把字体库增量同步到你自己的 GitHub 私有仓，多台电脑自动保持一致。",
     "detail": "按字体族打包增量同步：上传 / 下载 / sha256 校验 / 自动重扫。令牌 DPAPI 加密，多账号隔离。",
@@ -10,11 +10,11 @@
     "runtime": "python",
     "minAppVersion": "1.9.2",
     "lang": "zh-CN",
-    "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/font-sync-0.9.5.zip",
+    "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-FONT-SYNC.zip",
     "size": 108520
   },
   {
-    "id": "com.fontmanager.example.font-stats",
+    "id": "FM-FONT-STAT",
     "name": "字体统计",
     "brief": "统计字体库：家族、字重、风格、版权分布，生成图表报告。",
     "detail": "对当前字体库做全量统计并生成可视化报告。",
@@ -24,11 +24,11 @@
     "runtime": "python",
     "minAppVersion": "1.9.0",
     "lang": "zh-CN",
-    "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/font-stats.zip",
+    "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-FONT-STAT.zip",
     "size": 20000035
   },
   {
-    "id": "com.fontmanager.example.specimen-export",
+    "id": "FM-FONT-SPEC",
     "name": "字样导出",
     "brief": "把字体导出为字样图 / PDF 样张。",
     "detail": "选中字体族生成字样图或 PDF 样张，支持批量。",
@@ -38,11 +38,11 @@
     "runtime": "python",
     "minAppVersion": "1.9.0",
     "lang": "zh-CN",
-    "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/specimen-export.zip",
+    "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-FONT-SPEC.zip",
     "size": 20018319
   },
   {
-    "id": "com.fontmanager.font-apply",
+    "id": "FM-FONT-APPLY",
     "name": "字体应用",
     "brief": "按场景一键应用字体组合。",
     "detail": "预设场景（标题/正文/代码）一键切换启用字体组合。",
@@ -52,11 +52,11 @@
     "runtime": "python",
     "minAppVersion": "1.9.0",
     "lang": "zh-CN",
-    "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/font-apply.zip",
+    "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-FONT-APPLY.zip",
     "size": 20790
   },
   {
-    "id": "com.example.hello-plugin",
+    "id": "FM-DEMO-HELLO",
     "name": "插件模板",
     "brief": "官方插件开发模板：最小可运行插件 + 面板示例。",
     "detail": "复制本插件作为起点开发你自己的 FontManager 插件。",
@@ -66,7 +66,7 @@
     "runtime": null,
     "minAppVersion": "1.9.0",
     "lang": "zh-CN",
-    "download": "https://github.com/706972745/FontManager-Plugin/releases/download/v1/template-hello.zip",
+    "download": "https://github.com/706972745/Manager-Plugin/releases/download/v1/FM-DEMO-HELLO.zip",
     "size": 4268
   }
 ]

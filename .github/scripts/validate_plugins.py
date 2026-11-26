@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FontManager-Workshop registry · 插件 PR 校验。
+"""插件库 registry · 插件 PR 校验（FontManager 与 AssetManager 共用）。
 
 CI（.github/workflows/validate.yml）与本地自测跑的是**同一份**代码：
 CI 里那点内联 python 没法在本地复现，改错了只能等推送后看红灯。
@@ -18,6 +18,9 @@ CI 里那点内联 python 没法在本地复现，改错了只能等推送后看
   9. 目录里不许有未登记在 files 里的文件（面板的文件列表就是 files，
      藏文件等于骗审核）
 
+id 规则：前缀必须是 `app_prefixes.APP_PREFIXES` 里的键（`FM` = FontManager，
+`AM` = AssetManager，必须大写），后面两段各自是字母或数字，整串 ≤ 40 字符。
+
 用法：
   python .github/scripts/validate_plugins.py --root .
   python .github/scripts/validate_plugins.py --root . --author alice --base origin/main
@@ -34,13 +37,18 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from app_prefixes import (  # noqa: E402  前缀表只此一份，聚合脚本也 import 它
+    MAX_ID_LEN, is_valid_id, prefixes_hint,
+)
+
 # ── 常量（改这里 = 改 registry 规则）────────────────────────────────────
 
-# 2026-11-25：id 放开到「小写字母 / 数字 / 点 / 短横线」，2~40 位，首尾必须是字母或数字。
-# 原因：主程序里插件 id 一直用 Java 包名式写法（com.iieozo.adobe-font），
-# registry 只认 a-z0-9- 会把这类插件全部挡在门外 —— 硬要改名等于换一个插件身份
-# （安装目录名、配置、用户认知全变）。点号只允许出现在中间，`..`、首尾点一律拒。
-ID_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]{0,38}[a-z0-9])$")
+# 2026-11-26：id 从「Java 包名式」改成「<软件前缀>-<段>-<段>」：
+#   FM-FONT-SYNC / AM-ASSET-TAG ……
+# 原因：FontManager 与 AssetManager 共用一个插件库，靠前缀分归属；
+# 客户端只拉自己那份切片（by-app/<前缀>.json），别的软件的条目根本不会进内存。
+# 前缀白名单在 app_prefixes.py（与聚合脚本共用），这里只拿现成的判定函数与长度上限。
 AUTHOR_RE = re.compile(r"^(?:anonymous-[0-9a-z]{4,16}|[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})$")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
@@ -51,7 +59,7 @@ MAX_DETAIL = 1000
 # 插件名称上限（显示名，不是 id）。与面板 `src/workshop/upload.ts` 的 MAX_NAME 同口径：
 # 卡片一行放不下更长的名字，列表会参差不齐。面板上传前就拦住，这里兜住手搓的 PR。
 # 按**字符数**（Python str 天然如此），中文/emoji 一个字算一个。
-MAX_NAME = 15
+MAX_NAME = 25
 
 # 与主程序 `src-tauri/src/api.rs` 的 `PERMS` **必须一致**。
 # 两边不同步的后果：这里放过的权限名运行时会被 sanitize_plugin_perms 丢掉，
@@ -184,8 +192,14 @@ def validate_one(root: Path, pdir: Path, rep: Report) -> None:
         return
 
     pid, author = m["id"], m["author"]
-    if not isinstance(pid, str) or not ID_RE.match(pid):
-        rep.err(where, f"id 不合法（小写字母/数字/点/短横线，2~40 位，首尾须为字母或数字）：{pid!r}")
+    # 先判长度再用正则：长度上限只有一个出处（APP_PREFIXES 同模块的 MAX_ID_LEN），
+    # 不靠正则里数 {0,38} 这种容易数错、也容易被别处漏掉的写法。
+    if not isinstance(pid, str) or len(pid) > MAX_ID_LEN or not is_valid_id(pid):
+        rep.err(
+            where,
+            f"id 不合法（插件 ID 必须是 <前缀>-XXX-XXX：前缀为 {prefixes_hint()}，"
+            f"两段各自是字母或数字，整串 ≤ {MAX_ID_LEN} 字符）：{pid!r}",
+        )
     if not isinstance(author, str) or not AUTHOR_RE.match(author):
         rep.err(where, f"author 不合法（GitHub 登录名或 anonymous-xxxx）：{author!r}")
     if not isinstance(m["name"], str) or not m["name"].strip():
