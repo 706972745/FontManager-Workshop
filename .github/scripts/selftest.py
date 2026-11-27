@@ -22,13 +22,25 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 VALIDATOR = HERE / "validate_plugins.py"
+AGGREGATOR = HERE / "aggregate_index.py"
 
 PLUGIN_DIR = "plugins/FM-FONT-RENAME__alice"
+PID = "FM-FONT-RENAME"
+# 固定时间戳：聚合的输出里只有 generatedAt 会随「现在几点」变，钉住它才能比字节。
+NOW = "2026-01-01T00:00:00Z"
 
 
 def run(root: Path, *extra: str) -> tuple[int, str, str]:
     p = subprocess.run(
         [sys.executable, str(VALIDATOR), "--root", str(root), *extra],
+        capture_output=True, text=True,
+    )
+    return p.returncode, p.stdout, p.stderr
+
+
+def run_aggregate(root: Path, *extra: str) -> tuple[int, str, str]:
+    p = subprocess.run(
+        [sys.executable, str(AGGREGATOR), "--root", str(root), *extra],
         capture_output=True, text=True,
     )
     return p.returncode, p.stdout, p.stderr
@@ -172,6 +184,63 @@ def author_cases() -> list[tuple[str, bool, str]]:
     ]
 
 
+def write_index(root: Path) -> None:
+    """在临时副本里真跑一遍聚合。只写副本，仓库里的 index.json 不碰。"""
+    code, out, err = run_aggregate(root, "--now", NOW)
+    if code != 0:
+        raise RuntimeError(f"聚合失败：{err.strip() or out.strip()}")
+
+
+def entry_of(root: Path, pid: str) -> dict:
+    data = json.loads((root / "index.json").read_text(encoding="utf-8"))
+    for e in data["plugins"]:
+        if e["id"] == pid:
+            return e
+    raise KeyError(f"聚合结果里没有 {pid}")
+
+
+def with_run_fields(m: dict) -> None:
+    """模拟 1.4.1+ 上传面板写进 plugin.json 的运行字段。"""
+    m.update(
+        hooks=["init", "settings"],
+        menus=[{"title": "双击套用", "on": "plugin"}],
+        settings={"title": "设置"},
+    )
+
+
+def check_run_fields(e: dict) -> str | None:
+    for k in ("hooks", "menus", "settings"):
+        if k not in e:
+            return f"条目里没有 {k}（被聚合丢掉了）"
+    if e["hooks"] != ["init", "settings"]:
+        return f"hooks 内容不一致：{e['hooks']!r}"
+    if e["menus"] != [{"title": "双击套用", "on": "plugin"}]:
+        return f"menus 内容不一致：{e['menus']!r}"
+    return None
+
+
+def check_no_junk(e: dict) -> str | None:
+    if "__junk" in e:
+        return "allowlist 外的键 __junk 混进了清单"
+    return None
+
+
+def check_empty_skipped(e: dict) -> str | None:
+    for k in ("hooks", "summary"):
+        if k in e:
+            return f"空值 {k} 被写进了条目（会变成清单噪声）"
+    return None
+
+
+def aggregate_cases() -> list[tuple[str, callable, callable]]:
+    """聚合透传用例：(说明, 改清单, 断言条目)。"""
+    return [
+        ("正例：hooks / menus / settings 进了清单", with_run_fields, check_run_fields),
+        ("反例：allowlist 外的键不进清单", lambda m: m.update(__junk={"x": 1}), check_no_junk),
+        ("空值：hooks=[] 与 summary=\"\" 不写入", lambda m: m.update(hooks=[], summary=""), check_empty_skipped),
+    ]
+
+
 def main() -> int:
     failures: list[str] = []
 
@@ -223,12 +292,57 @@ def main() -> int:
             else:
                 print(f"ok  作者归属：{label}")
 
+    # ── 聚合透传（面板字段不许静默丢）+ 幂等 ──
+    aggregate_ok = 0
+    for label, mutate, check in aggregate_cases():
+        with tempfile.TemporaryDirectory() as tmp:
+            root = copy_repo(Path(tmp) / "repo")
+            patch_manifest(root, mutate)
+            try:
+                write_index(root)
+            except RuntimeError as e:
+                failures.append(f"聚合「{label}」：{e}")
+                continue
+            problem = check(entry_of(root, PID))
+            if problem:
+                failures.append(f"聚合「{label}」：{problem}")
+            else:
+                aggregate_ok += 1
+                print(f"ok  聚合：{label}")
+
+    # 同一份输入连跑两次：文件字节一致，--check 两次都报「最新」且输出相同（CI 不误报）
+    with tempfile.TemporaryDirectory() as tmp:
+        root = copy_repo(Path(tmp) / "repo")
+        patch_manifest(root, with_run_fields)
+        try:
+            write_index(root)
+            first = (root / "index.json").read_bytes()
+            write_index(root)
+            second = (root / "index.json").read_bytes()
+        except RuntimeError as e:
+            failures.append(f"聚合幂等：{e}")
+        else:
+            c1, o1, _e1 = run_aggregate(root, "--now", NOW, "--check")
+            c2, o2, _e2 = run_aggregate(root, "--now", NOW, "--check")
+            if first != second:
+                failures.append("聚合幂等：连跑两次 index.json 字节不一致")
+            elif c1 != 0 or c2 != 0:
+                failures.append(f"聚合幂等：--check 退出码 {c1}/{c2}（写完后应当是最新的）")
+            elif o1 != o2:
+                failures.append(f"聚合幂等：两次 --check 输出不同\n第一次：{o1}\n第二次：{o2}")
+            else:
+                aggregate_ok += 1
+                print(f"ok  聚合：--check 幂等（{o1.strip()}）")
+
     if failures:
         print("\n自测失败：", file=sys.stderr)
         for f in failures:
             print(f"  - {f}", file=sys.stderr)
         return 1
-    print(f"\n自测全部通过：1 个正例 + {len(CASES)} 个反例 + {len(author_cases())} 个归属用例")
+    print(
+        f"\n自测全部通过：1 个正例 + {len(CASES)} 个反例 + {len(author_cases())} 个归属用例"
+        f" + {aggregate_ok} 个聚合用例"
+    )
     return 0
 
 

@@ -10,11 +10,24 @@ name: Aggregate index.json + by-app slices
 # source or owner organization」，网页 Add bypass 里也搜不到），所以 GITHUB_TOKEN
 # 的 push 会被 required PR 拦下。
 #
-# 两条路，本文件都兜住：
+# ⚠️ 2026-11-27 事故教训（run 45927533672）：
+# 早先这里给 checkout 配了 `token: ${{ secrets.AGGREGATE_PAT || github.token }}`，
+# 想「一步到位」让 checkout 顺便存好推送凭据。结果 secret 配了却失效/没有本仓库权限时，
+# checkout 拿到 401 → git 开始追问用户名 → CI 里没有终端（terminal prompts disabled）→
+# 整个 job 在**第 2 步**就 exit 128，后面校验 / 重生成 / 提交全部 skipped。
+# 代价是：用户插件 `plugins/FM-ADOBE-FONT__helloooooseff` 已经合进 main，
+# 但 index.json 与 by-app/fm.json 没重算，插件在客户端插件中心完全不出现，而且没人收到通知。
+# 所以现在的分工是固定的，别再把 PAT 塞回 checkout：
+#   - checkout 只用默认 GITHUB_TOKEN，任何 secret 失效都不许阻塞「先把代码读下来」；
+#   - PAT 只用在「推 main」这一下，失效就降级（PAT → GITHUB_TOKEN → 开 PR），逐级 ::warning::；
+#   - 任何一级全挂 → 末尾的 if: failure() 开 issue，绝不再让插件静默消失。
+#
+# 推送的三条路，本文件都兜住：
 #   ① 配了 `AGGREGATE_PAT`（仓库 Settings → Secrets → Actions）→ 用它推，
 #      令牌属于管理员账号，命中 bypass 里的 Repository admin，直接进 main，全自动；
-#   ② 没配 → GITHUB_TOKEN 推失败 → **自动改开一个 PR**，人工点合并。
-#      绝不静默失败：失败时 index.json 不更新，插件会「已合并但中心看不到」。
+#      但 secret 过期/换仓库/权限不够都是常态，所以这一路失败只降级、不失败；
+#   ② PAT 不可用 → GITHUB_TOKEN 再试一次；
+#   ③ 还不行 → **自动改开一个 PR**，人工点合并。
 on:
   push:
     branches: [main]
@@ -27,6 +40,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # 失败时要用 gh issue create 开单，否则 aggregate 红了也没人知道
+  issues: write
 
 concurrency:
   group: aggregate-index
@@ -40,13 +55,10 @@ jobs:
         with:
           # eol 守卫要读 blob 比对字节，需要完整历史
           fetch-depth: 0
-          # 必须在这里给 token：`git push` 用的是 checkout 存下的 http.extraheader，
-          # 只在「有变化才提交」步骤里设 GH_TOKEN 是没用的 —— 那只影响 gh 命令行。
-          # 2026-11-25 实测：配了 secret 仍然被 required PR 拦下，日志里那条
-          # `.extraheader AUTHORIZATION: basic ***` 就是 GITHUB_TOKEN 留下的。
-          # 配了 PAT（管理员身份 → 命中 ruleset 的 Repository admin bypass）就能直推；
-          # 没配则退回 GITHUB_TOKEN，照旧走下面的「改开 PR」分支。
-          token: ${{ secrets.AGGREGATE_PAT || github.token }}
+          # 故意不传 token：这里只用仓库默认的 GITHUB_TOKEN 把代码读下来。
+          # 一旦把 AGGREGATE_PAT 放在这里，secret 失效就变成 checkout 401，
+          # 整条流水线死在第 2 步（见顶部 2026-11-27 事故）——读代码不该依赖任何 PAT。
+          # 推送用的凭据在「有变化才提交」那一步按需注入，失败可降级。
 
       - name: 校验（index 只描述通过校验的插件）
         run: python3 .github/scripts/validate_plugins.py --root .
@@ -54,10 +66,18 @@ jobs:
       - name: 重生成 index.json 与 by-app 切片
         run: python3 .github/scripts/aggregate_index.py --root .
 
+      # 提交前自检：产物必须和 plugins/ 目录严格一致。
+      # 不一致就直接红在这一步，绝不下发一份错的清单 —— 错了客户端会全量 sha256 失败。
+      - name: 提交前自检（产物必须与目录一致）
+        run: python3 .github/scripts/aggregate_index.py --root . --check
+
       - name: 有变化才提交
         env:
-          # 配了 PAT 就用 PAT（管理员 → 可绕过 required PR）；没配退回 GITHUB_TOKEN
-          GH_TOKEN: ${{ secrets.AGGREGATE_PAT || github.token }}
+          # PAT 只在这一步用（推 main 时命中 ruleset 的 admin bypass）；
+          # checkout 已经不依赖它，所以 secret 失效最多让推送降级，不会再把 job 扼杀在开头。
+          AGGREGATE_PAT: ${{ secrets.AGGREGATE_PAT }}
+          # gh 永远用仓库自带的 GITHUB_TOKEN，跟 PAT 是否有效无关
+          GH_TOKEN: ${{ github.token }}
         run: |
           # 产物是 index.json（全量）+ by-app/*.json（按软件切片），两者都要跟。
           # 只比 index.json 的话，改了插件但切片没更新时会误以为「没变化」。
@@ -86,18 +106,81 @@ jobs:
           git add index.json by-app
           git commit -m "chore(index): 由 aggregate_index.py 重生成（含 by-app 切片）"
 
-          if git push; then
-            echo "index.json / by-app 已直接推送到 main"
+          # ① 有 PAT 就先试 PAT：管理员身份可以绕过 required PR，直接进 main。
+          #    凭据用 -c http.extraheader 传，绝不把带 token 的 URL 或 echo 出来的 secret 写进日志。
+          if [ -n "${AGGREGATE_PAT:-}" ]; then
+            echo "::add-mask::$AGGREGATE_PAT"
+            if git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$AGGREGATE_PAT" | base64 -w0)" push origin HEAD:main; then
+              echo "index.json / by-app 已用 AGGREGATE_PAT 直接推送到 main"
+              exit 0
+            fi
+            echo "::warning::AGGREGATE_PAT 推送失败（secret 可能已过期 / 被吊销 / 无权访问本仓库 / 缺 contents:write）——降级为 GITHUB_TOKEN 重试"
+          else
+            echo "::warning::没有配置 AGGREGATE_PAT，跳过 PAT，直接用 GITHUB_TOKEN 推送"
+          fi
+
+          # ② 退回默认 token。required PR 开着时这里大概率被拒，但试一次，能通就直接进 main。
+          if git push origin HEAD:main; then
+            echo "index.json / by-app 已用 GITHUB_TOKEN 推送到 main"
             exit 0
           fi
 
-          # 推不上去（没配 PAT，或 PAT 也不是管理员）→ 开 PR，让维护者点一下
-          echo "::warning::直接推送被拒：检查 AGGREGATE_PAT 是否已配置、是否带 contents:write、是否属于管理员账号"
+          # ③ 还推不上去 → 建 chore 分支开 PR，让维护者点一下合并
+          echo "::warning::GITHUB_TOKEN 也推不上 main（多半是 required PR 拦下的，个人账号无法把 Actions 加进 bypass）——改开 PR"
           BRANCH="chore/index-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH"
-          git push -u origin "$BRANCH"
-          gh pr create \
+          if ! git push -u origin "$BRANCH"; then
+            echo "::error::chore 分支 $BRANCH 也推不上去，PR 兜底失败；本次 index.json 没有落地，插件会「已合并但中心看不到」"
+            exit 1
+          fi
+          BODY=/tmp/aggregate_pr_body.md
+          {
+            echo "main 开了 required PR，Actions 无法绕过（个人账号限制），所以改开 PR。合并后新插件才会出现在插件中心。"
+            echo
+            echo "- 本次 run：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "- HEAD sha：${{ github.sha }}"
+          } > "$BODY"
+          if ! gh pr create \
             --base main \
             --head "$BRANCH" \
             --title "chore(index): 重生成 index.json 与 by-app 切片" \
-            --body "main 开了 required PR，Actions 无法绕过（个人账号限制），所以改开 PR。合并后新插件才会出现在插件中心。"
+            --body-file "$BODY"; then
+            echo "::error::gh pr create 失败，改动留在分支 $BRANCH 上，需要人工处理"
+            exit 1
+          fi
+          echo "::notice::已开 PR，等维护者合并后插件才会出现在插件中心"
+
+      # 这一步是本文件存在的底线：红了必须有人知道。
+      # 上一次事故就是「job 红了 → 没人看 → 插件静默消失在插件中心」。
+      - name: 失败必须有人看见（开 issue 追踪）
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="aggregate 失败：新插件已合并但不在插件中心"
+          # checkout 万一自己挂了，这里也不许再抛错把 issue 一起吞掉
+          SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          existing=$(gh issue list --search 'in:title "aggregate 失败"' --state open --limit 50 --json number --jq 'length')
+          if [ "${existing:-0}" != "0" ]; then
+            echo "::warning::已有 $existing 个开着的同类 issue，不重复开"
+            exit 0
+          fi
+          cat > /tmp/aggregate_issue.md <<EOF
+          aggregate 在 main 上失败：新插件可能已经合并，但 index.json / by-app 没重算，插件中心看不到它。
+
+          - run：${RUN_URL}
+          - HEAD sha：${SHA}
+
+          排查顺序：
+          1. 看 run 里哪一步红了（checkout 已不再依赖 PAT，正常不会再死在第 2 步）；
+          2. 若推送被 required PR 拦下 → 检查 AGGREGATE_PAT 是否过期 / 被吊销 / 无权访问本仓库 / 缺 contents:write；
+          3. 若「提交前自检」红了 → 产物与 plugins/ 目录不一致，别手改 index.json，本地跑 aggregate_index.py 看差异。
+
+          修好后再跑一次本 workflow（或合并兜底 PR）即可，插件会自动出现在插件中心。
+          EOF
+          if ! gh issue create --title "$TITLE" --body-file /tmp/aggregate_issue.md; then
+            echo "::error::开 issue 也失败了，请手动记录：$RUN_URL（HEAD $SHA）"
+            exit 1
+          fi
+          echo "::notice::已开 issue 追踪本次 aggregate 失败"

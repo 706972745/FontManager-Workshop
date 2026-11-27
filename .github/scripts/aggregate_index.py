@@ -46,6 +46,15 @@ DEFAULT_REPO = "706972745/Manager-Workshop"
 DEFAULT_BRANCH = "main"
 SLICE_DIR = "by-app"
 
+# 上传面板（1.4.1 起）会把运行字段写进 plugin.json，而聚合只搬下面那份固定字段表，
+# 结果这些字段在 index.json 里静默消失 —— 客户端拿到的清单比作者提交的少信息。
+# 只透传这张表里的键（不是原样搬运整个 plugin.json）：plugin.json 里塞的任意垃圾
+# 键仍然不许进公开清单。顺序固定，保证同一输入逐字节一致。
+PASSTHROUGH_KEYS = (
+    "entry", "apiLevel", "hooks", "menus",
+    "settings", "summary", "description", "requirements",
+)
+
 
 def raw_url(repo: str, branch: str, path: str) -> str:
     return f"https://raw.githubusercontent.com/{repo}/{branch}/{path}"
@@ -80,6 +89,15 @@ def eol_mismatch(root: Path, rel: str, work_sha: str) -> tuple[str, str] | None:
     return (work_sha, blob) if clean.returncode == 0 else None
 
 
+def has_value(v) -> bool:
+    """作者到底填了没有？null / [] / {} / "" 都算没填 —— 写进清单只是噪声。"""
+    if v is None:
+        return False
+    if isinstance(v, (str, list, dict)) and not v:
+        return False
+    return True
+
+
 def build_plugin_entry(root: Path, pdir: Path, repo: str, branch: str) -> dict:
     m = json.loads((pdir / "plugin.json").read_text(encoding="utf-8"))
     files = []
@@ -105,7 +123,7 @@ def build_plugin_entry(root: Path, pdir: Path, repo: str, branch: str) -> dict:
             "url": raw_url(repo, branch, repo_rel),
             "size": size,
         })
-    return {
+    entry = {
         "id": m["id"],
         "name": m["name"],
         "brief": m["brief"],
@@ -116,12 +134,20 @@ def build_plugin_entry(root: Path, pdir: Path, repo: str, branch: str) -> dict:
         "runtime": m.get("runtime"),
         "minAppVersion": m.get("minAppVersion"),
         "lang": m.get("lang"),
+    }
+    # 运行字段按 PASSTHROUGH_KEYS 的固定顺序插在 lang 之后、official 之前：
+    # 位置固定 ⇒ 同一份 plugin.json 反复跑出来的字节完全一致（CI 才不会误判「清单变了」）。
+    for key in PASSTHROUGH_KEYS:
+        if has_value(m.get(key)):
+            entry[key] = m[key]
+    entry.update({
         "official": False,
         "uploadedAt": m.get("uploadedAt"),
         "files": files,
         "dir": f"plugins/{pdir.name}",
         "size": total,
-    }
+    })
+    return entry
 
 
 def build_index(root: Path, repo: str, branch: str, now: str) -> dict:
