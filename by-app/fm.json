@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-28T08:03:45Z",
+  "generatedAt": "2026-11-28T08:07:33Z",
   "official": [
     {
       "id": "FM-FONT-SYNC",
@@ -177,7 +177,7 @@
         "note": "所有 Adobe 安装位置靠注册表 ProgID / App Paths 与目录探测定位，不写死路径；AE / PR 用随包 CEP 面板接收指令，面板安装不需要管理员权限。已在 FontManager 2.7.7 上验证（插件行右键菜单、拖 zip 安装、齿轮内嵌面板这一套），更早版本未测。"
       },
       "official": false,
-      "uploadedAt": "2026-11-28T08:03:20Z",
+      "uploadedAt": "2026-11-28T08:05:01Z",
       "files": [
         {
           "path": "README.md",
@@ -193,7 +193,7 @@
         },
         {
           "path": "plugin.json",
-          "sha256": "942f2ac769051f22bbeb375a5358195ee919caf5062a9fe8df405b733a1c9bae",
+          "sha256": "74aa798e5fda7ade9acf1444b907a53fc717471532a5a5c02f1198db6d9f8903",
           "url": "https://raw.githubusercontent.com/706972745/Manager-Workshop/main/plugins/FM-ADOBE-FONT__helloooooseff/plugin.json",
           "size": 4554
         }
