@@ -33,6 +33,12 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  # 2026-11-28：删完必须显式让 aggregate.yml 重算清单。
+  # 本文件推 main 用的是 GITHUB_TOKEN，而 **GITHUB_TOKEN 产生的 push 事件不会再触发
+  # 别的 workflow**（GitHub 的防递归硬规则）。所以 aggregate.yml 那个
+  # `on: push: paths: plugins/**` 收不到这次删除 —— 实测 07:16:44 删掉
+  # FM-ADOBE-FONT 之后，aggregate 一次都没跑，清单里那条幽灵条目挂了半小时。
+  actions: write
 
 concurrency:
   group: takedown-${{ github.event.issue.number || github.event.pull_request.number }}
@@ -115,6 +121,22 @@ jobs:
 
             if (problems.length > 0) return reject(problems)
 
+            // 清单重算：本文件无论「真删了」还是「目录本来就不在」，都要让 aggregate 跑一次。
+            // 后者尤其容易漏 —— 目录已删但清单还挂着那条时，作者看到的就是「下架点了没反应」。
+            // 失败只 warning：删除已经成功，不能因为清单没算把下架报成失败（作者会反复点）。
+            const recompute = async () => {
+              try {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner, repo, workflow_id: 'aggregate.yml', ref: 'main',
+                })
+                core.info('已 dispatch aggregate 重算清单')
+              } catch (e) {
+                core.warning(
+                  `dispatch aggregate 失败（${e.status || '?'}）：清单要等下一次推送或定时兜底才重算。${e.message}`,
+                )
+              }
+            }
+
             // ③ 目录必须真实存在于 main
             const mainRef = await github.rest.git.getRef({ owner, repo, ref: 'heads/main' })
             const baseSha = mainRef.data.object.sha
@@ -129,7 +151,10 @@ jobs:
               (e) => e.type === 'blob' && dirList.some((d) => e.path.startsWith(`plugins/${d}/`)),
             )
             if (targets.length === 0) {
-              await say('这些目录已经不在仓库里了，视为已下架。')
+              // 目录不在了 ≠ 清单是对的：它可能正是被上一次推送删掉、而清单没重算，
+              // 于是中心里还挂着。所以这里也要补一次重算，不能只回一句就关。
+              await recompute()
+              await say('这些目录已经不在仓库里了，视为已下架。已让清单重算，插件中心稍后会消失。')
               return close()
             }
 
@@ -154,6 +179,7 @@ jobs:
               return reject([`下架时仓库刚好有新提交，请稍后重新点一次下架（${e.status}）`])
             }
 
+            await recompute()
             await say(`已下架：\n\n${dirList.map((d) => `- \`plugins/${d}/\``).join('\n')}\n\n` +
-              '`index.json` 会在几十秒内重算，插件中心随之消失。')
+              '已让清单重算，插件中心稍后会消失（通常 10 秒~1 分钟）。')
             await close()
