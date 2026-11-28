@@ -1,0 +1,73 @@
+name: Auto-merge aggregate index PRs
+
+# 2026-11-28：聚合脚本（aggregate.yml）在「main 开了 required PR、Actions 无法绕过」时
+# 会降级为开一个 `chore(index):` PR（PR 正文里写明原因）。这个文件让这类 PR
+# **自动合并**，不用人工点。
+#
+# 为什么不塞进 auto-merge.yml：那个监听的是 `Validate plugin PRs` 的完成事件，
+# 只管插件 PR；聚合 PR 不跑 validate，靠的是脚本自身确定性（index 由仓库内容重算）。
+#
+# 为什么必须用 AGGREGATE_PAT：`github.token` 不在 ruleset 的 bypass 名单里，
+# 合并会被「Review required」拦住；管理员身份的 PAT 才能绕（与 takedown 同一套路）。
+#
+# 安全检查（缺一条就不合并，留给人工）：
+#   1. PR 作者必须是 `github-actions[bot]`，标题以 `chore(index):` 开头；
+#   2. 全部改动只允许落在 `index.json` 与 `by-app/` 切片里 —— 碰了任何别的文件
+#      （尤其 `.github/`、脚本、`plugins/`）一律不自动合；
+#   3. draft / 已合并 / 已关闭不处理。
+#
+# 若 AGGREGATE_PAT 失效：本任务会失败并留日志（与 takedown 同因），此时 index PR
+# 仍会挂着等人工 —— 去仓库 Settings → Secrets 更新 AGGREGATE_PAT。
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: auto-merge-index-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.pull_request.title, 'chore(index):') &&
+       github.event.pull_request.user.login == 'github-actions[bot]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge the aggregate index PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.AGGREGATE_PAT || github.token }}
+          script: |
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+
+            if (!pr) { core.info("no PR in context"); return; }
+            const number = pr.number;
+
+            const { data: cur } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            if (cur.merged) { core.info(`#${number} already merged`); return; }
+            if (cur.state !== "open" || cur.draft) { core.info(`#${number} is ${cur.state}/draft`); return; }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: number, per_page: 100,
+            });
+            const outside = files.filter(
+              (f) => f.filename !== "index.json" && !f.filename.startsWith("by-app/"),
+            );
+            if (outside.length > 0) {
+              core.info(`#${number} touches ${outside.length} file(s) outside index/by-app — skipping`);
+              for (const f of outside) core.info(`  ${f.filename}`);
+              return;
+            }
+
+            const res = await github.rest.pulls.merge({
+              owner, repo, pull_number: number, merge_method: "squash",
+            });
+            core.info(`merged #${number} -> ${res.data.sha}`);
