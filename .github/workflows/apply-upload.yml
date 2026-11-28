@@ -60,6 +60,15 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
+            const crypto = require('crypto');
+
+            /** git blob sha1 = sha1("blob <len>\\0" + content)，与 `f.sha` 同口径 */
+            const gitBlobSha = (buf) => {
+              const h = crypto.createHash('sha1');
+              h.update(`blob ${buf.length}\u0000`);
+              h.update(buf);
+              return h.digest('hex');
+            };
             const { owner, repo } = context.repo;
             const pr = Number(process.env.PR);
             const pat = process.env.APPLY_TOKEN;
@@ -160,11 +169,16 @@ jobs:
             }
 
             // ── 闸门④：体积（与客户端 MAX_FILE_BYTES / MAX_PLUGIN_BYTES 对齐）
+            //    ⚠️ `pulls.listFiles` 的 `size` **可能是 null**（PR #50 实测：plugin.json 记 undefined）。
+            //    以前这里直接比 `buf.length !== f.size`，等于把「字段缺失」判成「大小不符」，
+            //    结果 B 每次都 skip、最后靠人手动合并 —— 看起来像"自动落地不工作"。
+            //    真实完整性改由 git blob sha 兜住（见下面读到内容后的校验）。
             const MAX_FILE = 10 * 1024 * 1024, MAX_ALL = 20 * 1024 * 1024;
             let total = 0;
             for (const f of live) {
-              if (f.size > MAX_FILE) return skip(`文件过大：\`${f.filename}\`（${f.size} 字节）`);
-              total += f.size;
+              const known = typeof f.size === 'number';
+              if (known && f.size > MAX_FILE) return skip(`文件过大：\`${f.filename}\`（${f.size} 字节）`);
+              if (known) total += f.size;
             }
             if (total > MAX_ALL) return skip(`插件包总体积 ${total} 字节超过 20MB`);
 
@@ -182,13 +196,22 @@ jobs:
               const res = await fetch(url);
               if (!res.ok) return skip(`下载失败：\`${f.filename}\` → HTTP ${res.status}`);
               const buf = Buffer.from(await res.arrayBuffer());
-              if (buf.length !== f.size) {
+              // 完整性：按 git 的 blob 口径实算 sha1，与 PR 记录的 `f.sha` 比对。
+              // 这比 `size` 可靠（size 可能为 null），也比"等下建 blob 再比"更早失败。
+              const blobSha = gitBlobSha(buf);
+              if (f.sha && blobSha !== f.sha) {
+                return skip(
+                  `内容校验失败：\`${f.filename}\``,
+                  `PR 记 \`${f.sha}\`，下载后实算 \`${blobSha}\`（${buf.length} 字节）。内容在传递途中被改过。`,
+                );
+              }
+              if (typeof f.size === 'number' && buf.length !== f.size) {
                 return skip(`大小不符：\`${f.filename}\`（PR 记 ${f.size}，实得 ${buf.length}）`);
               }
               const dest = path.join('plugins', dir, rel);
               fs.mkdirSync(path.dirname(dest), { recursive: true });
               fs.writeFileSync(dest, buf);
-              payload.push({ path: `plugins/${dir}/${rel}`, sha: f.sha, content: buf });
+              payload.push({ path: `plugins/${dir}/${rel}`, sha: blobSha, content: buf });
             }
 
             // ── 闸门⑤：跑 **base 仓自己的**校验器（唯一权威，与 CI 同一套规则）
