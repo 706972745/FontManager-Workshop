@@ -58,6 +58,14 @@ jobs:
               core.info(`#${number} is a draft`);
               return;
             }
+
+            // 2026-11-28：[upload] PR 由 apply-upload.yml 以「当前 main 为父」重建后落地，
+            // 不是 merge。两边都处理会出现「已落地 + 这里又 squash 一次」→ 多一个空 merge commit。
+            // 以 PR 标题为契约（客户端固定写 `[upload]`），`applied` 标签兜底。
+            if (pr.title.startsWith("[upload]") || (pr.labels || []).some((l) => l.name === "applied")) {
+              core.info(`#${number} is an [upload] PR — apply-upload handles it, skip squash-merge`);
+              return;
+            }
             if (!pr.head.repo || !pr.head.repo.fork) {
               core.info(`#${number} is not from a fork — leave it to a human`);
               return;
