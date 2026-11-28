@@ -36,6 +36,21 @@ on:
       - "official.json"
       - ".github/scripts/**"
   workflow_dispatch:
+  # ── 定时兜底（2026-11-28 加）────────────────────────────────────────────
+  # 根因：main 不再要求走 PR 之后，「合并 / 删除」全部改成用 GITHUB_TOKEN 直接推 main，
+  # 而 **GITHUB_TOKEN 产生的 push 事件不会触发别的 workflow**（GitHub 防递归硬规则）。
+  # 于是上面那个 `on: push: paths: plugins/**` 对机器人推的提交**完全收不到**：
+  # 实测 07:16:44 删掉 FM-ADOBE-FONT__helloooooseff 后，本工作流一次都没跑，
+  # 清单里那条幽灵条目挂了半小时，用户点安装直接 404。
+  #
+  # 现在 auto-merge / apply-upload / takedown 三个文件都已显式 dispatch 本工作流，
+  # 但那是「每条新路径都要记得补一行」的约定 —— 这份定时是唯一不依赖记性的兜底。
+  # 20 分钟：比面板「上游还没重算清单」提示的 30 分钟阈值更短，用户不会先看到警告再看恢复。
+  #
+  # 代价：无变化时不提交（脚本本身「有变化才提交」），公开仓 Actions 分钟数免费。
+  # 注意：GitHub 会在仓库连续 60 天无活动后自动停用定时任务，届时手动 Run 一次即可恢复。
+  schedule:
+    - cron: "*/20 * * * *"
 
 permissions:
   contents: write
