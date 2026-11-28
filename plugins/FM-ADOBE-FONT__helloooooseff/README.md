@@ -1,15 +1,123 @@
-# Adobe 套字器（FontManager 插件 · 0.3.4 · `FM-ADOBE-FONT`）
+# Adobe 套字器（FontManager 插件 · 0.4.0 · `FM-ADOBE-FONT`）
 
 **一个插件就够了**：双击套字、右键套字、设置面板、AE / PR 桥接面板都在这一个包里。
 不用再装官方件 `FM-FONT-APPLY`（PS / AI / CDR 版），也不需要 Python / Node 运行时。
 
 把字体应用到 Adobe 系列应用**当前选中的文字**上。同一套指令，按应用能力自动选通道。
 
+## 目录结构（一个插件一个目录，源码 / 产物 / 文档 / 测试分开）
+
+```
+FM-ADOBE-FONT/
+├── plugin.json           清单（打包必需，留在根目录）
+├── README.md             本说明（同时进安装包）
+├── src/                  源码与构建
+│   ├── adobe-apply.ps1   套字主体
+│   ├── install-cep.ps1   CEP 面板安装
+│   ├── cep/              AE / PR 面板
+│   ├── rust/             插件协议层（cargo 工程）
+│   ├── probe_ae*.jsx     排查探针
+│   └── tools/package.py  出包（自检 + 安装包 + 源码包）
+├── dist/                 产物：*.zip / adobe font/FM-ADOBE-FONT/
+├── docs/                 规则对照、测试方案与报告
+└── tests/                测试脚本；reports/ 下放实测记录
+```
+
+后续新插件按同样布局另建 `FontManager-plugin/FM-XXX-XXX/`，互不干扰。
+
+## 0.4.0：多软件同开时「自动」永远套到 Illustrator（真机 Z 序实锤）
+
+**症状**：PS / AI / ID / CDR 同时开着，切到 InDesign 的窗口操作，再回 FontManager 双击字体，
+字体永远进 Illustrator；提示还写着「已应用到 Illustrator」。点 ID 的窗口让它成为前台再回来，照样进 AI。
+看起来就是「这个插件只认 AI」。
+
+**根因**（本机真实 Z 序，AI + ID + PS 同开时采样）：
+
+```
+ Z  进程           可见   owner   标题
+ 0  FontManager    是     0       FontManager          ← 双击发生在这里
+ 1  Illustrator    否     0       Title                ← 隐藏窗口，无 owner，压在所有人上面
+ 2  Illustrator    否     0       Title
+ 3  Illustrator    否     0       OS_PopupWindow
+ ...
+107 InDesign       是     0       *未命名-1 @ 91%       ← 用户真正在用的
+171 Illustrator    是     0       未标题-1* @ 200%
+200 Photoshop      是     0       未标题-1 @ 66.7%
+```
+
+Illustrator 常驻十来个**不可见的顶层窗口**（`Title` / `OS_ViewContainer` / `wglDummyWindowFodder` /
+`NVOGLDC invisible`），全部无 owner。0.3.9 的 Z 序扫描只判「无 owner」，完全不看可见性，
+于是**永远命中排在最上面的那个看不见的 AI 窗口** —— 与用户实际操作无关，所以是「永远」而不是「偶尔」。
+
+**改法**（`src/rust/src/main.rs`）：
+
+1. Z 序扫描加「真的在用」过滤：`IsWindowVisible` + `!IsIconic` + `DwmGetWindowAttribute(DWMWA_CLOAKED)==0`
+   + 无 owner（`GW_OWNER` 为空，排除浮动面板 / 对话框）。便宜的判断先做，通过了才 `OpenProcess` 取进程名。
+2. 判定顺序改为以**实时证据**为主：① 前台就是设计软件 → 用它；② Z 序最上层「在用的」设计软件；
+   ③ 前台事件钩子记下的「最近用过」；④ 主程序 `/apps/active`。原来 ② 排在 ③ 后面，
+   一旦钩子没投递事件（受限桌面实测会出现），就只能落到 ② 并踩上面那个坑。
+3. 日志写清依据和窗口标题，例如 `自动目标：InDesign（Z 序最上层在用的窗口：*未命名-1 @ 91%）`。
+
+**实测对照**（`tests/diag_zorder.py`，依次把软件切前台再切回 FontManager 采样）：
+
+| 刚用过 | 0.3.9 判定 | 0.4.0 判定 |
+|---|---|---|
+| InDesign | Illustrator ❌（Z1 隐藏窗口） | **InDesign** ✅ |
+| Illustrator | Illustrator ✅ | Illustrator ✅ |
+| Photoshop | Illustrator ❌ | **Photoshop** ✅ |
+
+端到端（双击「自动」，ID 在前台过）：`自动目标：InDesign（Z 序最上层在用的窗口：*未命名-1 @ 91%）`
+→ `已应用「SimHei Normal」到 InDesign（1 个图层/文本框）`。
+
+---
+
+## 0.3.8 / 0.3.7：双击「自动」到底套哪个软件（终于定下来了）
+
+**问题链条**：双击发生在 FontManager 自己的窗口里，那一刻前台永远是 `fontmanager.exe`，插件只能"猜"目标。
+- 0.3.4 之前：猜 Z 序最上层的设计软件 → 用户明明在 ID 里，字体跑到后台的 AI 上（AI 又慢又「新建文字」），看起来就是「ID 用不了」。
+- 0.3.6 的错误尝试：把「上次套成功的软件」当粘性记忆 → ID 是记住了，但双击从此全进 ID，**PS / AI / CDR 又全用不了**。已撤掉。
+- **0.3.7 起的做法**：插件是常驻进程，后台每 400 ms 采样一次前台窗口，记住「最近成为前台的设计软件」——这正是菜单上「自动：应用到**最近使用的**设计软件」的字面含义。切到 PS 就套 PS，切到 ID 就套 ID，不需要任何记忆开关，也不会粘死。
+- **0.4.0 补的窟窿**：这套「最近前台」只有在钩子真能收到事件时才可靠；收不到就必须靠 Z 序，而 0.3.9 的 Z 序又被 Illustrator 的隐藏窗口劫持（见上一节）。现在 Z 序只认「在用的」窗口，并升到第二优先。
+
+| 版本 | 改动 |
+|---|---|
+| 0.3.7 | 目标判定改为「最近前台」采样；删掉 `lastTarget` 粘性配置 |
+| 0.4.0 | 见上一节：Z 序扫描加可见性过滤，判定顺序改成「前台 → 实时 Z 序 → 最近前台 → 主程序」。多软件同开时不再恒套 AI |
+| 0.3.9 | 前台监听从「400 ms 定时轮询」换成 `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)` 事件回调：**不切窗口就一次都不跑**，空闲实测 20 s 内 CPU 时间 0 ms / 内存 9.1 MB。收不到事件的环境（受限桌面、沙箱）会自动退到 2 s 一次兜底采样，且只读一个原子量、不扫窗口 |
+| 0.3.8 | ① 主程序返回 `created`（没有选中文字时它真会新建一段）文案改成「…没有选中的文字，已新建一段「X」（Ctrl+Z 可撤销）」，不再让人以为套上了；② `run_powershell` 真正执行超时（原来形参被丢掉，COM 一挂住会连带卡死插件的 stdin 循环） |
+
+实测（0.3.8，双击「自动」，各自软件在前台）：Photoshop 1.15 s、InDesign 0.94 s、CorelDRAW 0.88 s、Illustrator 3.1 s（AI 走主程序 DoJavaScript，天生慢）。全程都有 `正在套用到 X…` 提示，套错能立刻看见。
+
+---
+
+## 0.3.6 修了什么（已被 0.3.7 取代，留作记录）
+
+| 问题 | 现象 | 改法 |
+|---|---|---|
+| 双击套错了软件（阻断，看起来像 ID 坏了） | 用户正对着 InDesign 排版，双击字体后 ID 里毫无变化——字体被套到了后台的 Illustrator 上（`/apps/active` 报的是 illustrator，Z 序最上层的也是别的软件）。AI 那条路还慢（5–6 s），更像「没反应」 | 新增 `lastTarget`：**只要有一次套成功，就记住这个软件**，之后双击「自动」优先还给它；它没开文档/已退出时，自动退到 Z 序里的另一个软件再试一次。手点过一次「应用到 InDesign」即可长期固定 |
+| 不知道在套哪 | 1 秒的执行期里界面没有任何反馈 | 套字一开始就发一行 `正在套用到 InDesign…`，目标一目了然，套错也能立刻发现 |
+| ID 每次多一次 COM 往返 | 关模态框（`userInteractionLevel`）原来单独发一次 DoScript，约 +100 ms | 挪进套字脚本第一行，零额外往返 |
+
+实测（ID 2022，文档已打开、选中文本框）：**双击 → 落地 1.05 s**（其中 PowerShell 启动 ~0.37 s、COM 连接 ~0.5 s、真正赋值 ~0.15 s）。想再快只能改架构（常驻 PowerShell 宿主），暂不做。
+
+---
+
+## 0.3.5 修了什么（2026-11-27 全量实测后）
+
+| 问题 | 现象 | 改法 |
+|---|---|---|
+| Illustrator 套不上字（阻断） | 点中文本框再双击字体，恒回 `APPLIED:0`，字体不变却 `ok:true` | `sel[i].characterAttributes` → 按选区类型取 `textRange`（TextFrame / TextRange / GroupItem 分别处理）；无选区退到整篇文字框；改了 0 个对象时不再报成功（`ERR:选中对象里没有可改的文字`） |
+| InDesign `e2e` 必失败 | `SaveOptions.DO_NOT_SAVE_CHANGES` 是 PS 的枚举，ID 只有 `YES/NO/ASK` | ID/IC 分支改用 `SaveOptions.NO` |
+| ID 一弹模态框就全废 | `DisplayDialogs=3` 在 ID 上不存在（空操作），宿主一弹「恢复文档」警告，`DoScript` 全卡死，而 probe 仍回 ok | 连接后显式设 `scriptPreferences.userInteractionLevel = NEVER_INTERACT`（枚举值向宿主要，不写死） |
+| `%TEMP%` 越用越脏 | 每次调用泄漏一份 `adobe-apply-<pid>.jsx`（实测累计 58 份） | `Run-Jsx` 用完即删 |
+
+AE / PR 的结论见 `docs/测试报告.md`：**面板不会自动加载，首次必须在 `窗口 > 扩展 > FontManager 套字桥` 手动开一次**（AutoVisible 在 AE 2023 上实测未生效），README 旧文里「启动自动显示」这句已作废。
+
 ---
 
 ## 安装（把 zip 拖进 FontManager 就行）
 
-1. 把 `FM-ADOBE-FONT-0.3.4.zip`（或同内容的 `FM-ADOBE-FONT.zip`）**直接拖进 FontManager 主窗口**
+1. 把 `FM-ADOBE-FONT-0.4.0.zip`（或同内容的 `FM-ADOBE-FONT.zip`）**直接拖进 FontManager 主窗口**
    —— 软件会认出这是插件包并自动安装。
    （也可在 设置 → 插件 → 安装插件包… 选这个 zip；升级同理，拖进去会覆盖安装，配置保留。）
 2. 设置 → 插件 → 找到 **Adobe 套字器（全家桶）** → 打开开关。
@@ -54,10 +162,10 @@
 | 设置面板 | 有面板就写 `settings`（标题 + 钩子名），没写就没有齿轮 | `title` + `hook: "settings"` |
 | 运行环境自述 | 建议写 `requirements`（runtime / libraries / system / platforms / note） | 无运行时、零第三方库、Windows、PowerShell 5.1 |
 | API 级别 | `apiLevel` = 1（当前主程序） | 1 |
-| 版本号 | semver | `0.3.4` |
+| 版本号 | semver | `0.4.0` |
 | 分发包形态 | zip 里 `plugin.json` 在根；`config.json` / `secret.bin` / `state.json` 属数据文件，**不进包**（更新时也不会被覆盖） | 根目录三个文件，见下 |
 | 体积 | 单文件 ≤ 10 MB、整包 ≤ 20 MB | exe 451 KB，整包 < 1 MB |
-| 命名 | 目录名 = ID；资产名 `<ID>.zip`，带版本别名 `<ID>-<version>.zip` | `FM-ADOBE-FONT/`、`FM-ADOBE-FONT.zip`、`FM-ADOBE-FONT-0.3.4.zip` |
+| 命名 | 目录名 = ID；资产名 `<ID>.zip`，带版本别名 `<ID>-<version>.zip` | `FM-ADOBE-FONT/`、`FM-ADOBE-FONT.zip`、`FM-ADOBE-FONT-0.4.0.zip` |
 | 通信 | stdin 收 `init` / `invoke`，stdout 每行一个 JSON（UTF-8） | `log` / `toast` / `hint` / `open-url`（都在主程序支持的类型里，0.3.4 实测两帧往返正常） |
 
 ---
@@ -241,7 +349,7 @@ PR 没有 COM，也不支持 `-r` 跑脚本，**唯一入口是宿主内的 CEP 
 
 ## 文件清单
 
-分发包 `FM-ADOBE-FONT.zip`（版本别名 `FM-ADOBE-FONT-0.3.4.zip`）里只有 3 个文件：
+分发包 `FM-ADOBE-FONT.zip`（版本别名 `FM-ADOBE-FONT-0.4.0.zip`）里只有 3 个文件：
 
 | 文件 | 作用 |
 |---|---|
@@ -257,7 +365,7 @@ exe 在没有 `adobe-apply.ps1` / `cep/` / `rust/` 的干净目录里已实测�
 
 ---
 
-## 想接着改？源码在 `FM-ADOBE-FONT-0.3.4-source.zip`
+## 想接着改？源码在 `FM-ADOBE-FONT-0.4.0-source.zip`
 
 拿到这个插件的人**不是只能装来用**：源码单独打成一个包，随安装包一起发（同一目录 / 同一个 release）。
 两者必须分开，原因很硬：插件中心（registry）的文件白名单是
@@ -278,8 +386,9 @@ exe 在没有 `adobe-apply.ps1` / `cep/` / `rust/` 的干净目录里已实测�
 
 ```bash
 source "…/fillsFontManager/Fonts工程文件/env.sh"      # 便携 Rust 1.99 + MSVC + Windows SDK
-cd adobe-plugin/rust && cargo build --release        # → target/release/adobe-font-plugin.exe
-cd .. && cp rust/target/release/adobe-font-plugin.exe adobe-font.exe && python tools/package.py
+cd src/rust && cargo build --release                 # → src/rust/target/release/adobe-font-plugin.exe
+cd .. && cp rust/target/release/adobe-font-plugin.exe adobe-font.exe
+cd .. && python src/tools/package.py                 # 产物全部落在 dist/
 ```
 
 三个必须知道的点：
