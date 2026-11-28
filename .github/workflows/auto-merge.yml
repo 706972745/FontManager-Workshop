@@ -58,14 +58,6 @@ jobs:
               core.info(`#${number} is a draft`);
               return;
             }
-
-            // 2026-11-28：[upload] PR 由 apply-upload.yml 以「当前 main 为父」重建后落地，
-            // 不是 merge。两边都处理会出现「已落地 + 这里又 squash 一次」→ 多一个空 merge commit。
-            // 以 PR 标题为契约（客户端固定写 `[upload]`），`applied` 标签兜底。
-            if (pr.title.startsWith("[upload]") || (pr.labels || []).some((l) => l.name === "applied")) {
-              core.info(`#${number} is an [upload] PR — apply-upload handles it, skip squash-merge`);
-              return;
-            }
             if (!pr.head.repo || !pr.head.repo.fork) {
               core.info(`#${number} is not from a fork — leave it to a human`);
               return;
@@ -78,6 +70,19 @@ jobs:
             if (outside.length > 0) {
               core.info(`#${number} touches ${outside.length} file(s) outside plugins/ — skipping`);
               for (const f of outside) core.info(`  ${f.filename}`);
+              return;
+            }
+
+            // 2026-11-28：形态与 apply-upload.yml 的闸门一致（单目录 + 无重命名）时才让给它，
+            // 批量 PR（一个 PR 多个插件目录）仍走这里的 squash —— 否则那类 PR 会两边都不处理，
+            // 从"自动合并"退化成"全靠人点"。
+            const liveDirs = new Set(
+              files.filter((f) => f.status !== "removed").map((f) => f.filename.split("/")[1]),
+            );
+            const appliesCleanly = pr.title.startsWith("[upload]") && liveDirs.size === 1 &&
+              !files.some((f) => f.status === "renamed");
+            if (appliesCleanly || (pr.labels || []).some((l) => l.name === "applied")) {
+              core.info(`#${number} 由 apply-upload 落地（单目录 [upload]）— 这里不 squash`);
               return;
             }
 
