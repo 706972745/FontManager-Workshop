@@ -25,6 +25,12 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # 2026-11-28：合并完必须显式让 aggregate.yml 重算清单。
+  # 这里用的是 GITHUB_TOKEN 做 squash merge，而 **GITHUB_TOKEN 产生的 push 事件
+  # 不会再触发别的 workflow**（GitHub 防递归硬规则）—— aggregate.yml 的
+  # `on: push: paths: plugins/**` 收不到这次合并。漏了这一步的后果是：
+  # PR 合了、代码进 main 了，但插件中心里始终看不到那个插件。
+  actions: write
 
 jobs:
   merge:
@@ -90,3 +96,14 @@ jobs:
               owner, repo, pull_number: number, merge_method: "squash",
             });
             core.info(`merged #${number} -> ${res.data.sha}`);
+
+            // 合并成功 ≠ 插件可见：清单不会自己重算（见文件顶部 permissions 处的说明）。
+            // 显式 dispatch 一次；失败只 warning，不回滚合并 —— 合并是对的，缺的是重算。
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo, workflow_id: "aggregate.yml", ref: "main",
+              });
+              core.info("已 dispatch aggregate 重算清单");
+            } catch (e) {
+              core.warning(`dispatch aggregate 失败（${e.status || "?"}）：清单要等下一次推送或定时兜底才重算。${e.message}`);
+            }
