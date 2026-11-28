@@ -14,8 +14,9 @@ name: Takedown (author self-service)
 #   2. PR 情况下：head 必须是作者自己的 fork，且**所有**变更都是删除（不许夹带上新/修改）；
 #   3. 目标目录必须真实存在于 main（防空请求）；
 #   4. 只删这些目录下的文件，别的一个都不碰。
-# 通过后由 AGGREGATE_PAT（管理员身份，命中 ruleset 的 Repository admin bypass）
-# 直接删除并推 main，评论 + 关闭入口；任何一条不过 → 评论原因 + 关闭，绝不放行。
+# 通过后**直接删除并推 main**，评论 + 关闭入口；任何一条不过 → 评论原因 + 关闭，绝不放行。
+# 推 main 用的是仓库自带 GITHUB_TOKEN（`contents: write`）；AGGREGATE_PAT 已废弃，
+# 配了会优先用，没配也不影响（2026-11-28 起 ruleset 不再要求走 PR）。
 # 维护者仍可在网页/面板删任何插件。
 on:
   issues:
@@ -24,7 +25,12 @@ on:
     types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
-  contents: read
+  # 2026-11-28：`contents` 必须是 **write**。
+  # 以前这里写 read、靠 AGGREGATE_PAT 掩盖；PAT 废弃后 GITHUB_TOKEN 只有 read，
+  # 于是 createTree / createCommit / updateRef 一律 "Resource not accessible by integration"
+  # （#51 实测：脚本第 86 行 createTree 直接抛错，issue 至今没人关）。
+  # ruleset 已不再要求「必须走 PR」，所以 write 能直接推 main。
+  contents: write
   issues: write
   pull-requests: write
 
@@ -41,8 +47,8 @@ jobs:
     steps:
       - uses: actions/github-script@v7
         with:
-          # 没有配 PAT 时退回 GITHUB_TOKEN：能校验、能评论，但推不动 main
-          # （个人仓库不允许把 Actions 加进 ruleset bypass），此时只给结论不执行。
+          # 配了 AGGREGATE_PAT 就优先用（向后兼容）；没配就用 GITHUB_TOKEN —— 后者需要
+          # permissions.contents: write 才推得动 main，别改成 read。
           github-token: ${{ secrets.AGGREGATE_PAT || github.token }}
           script: |
             const { owner, repo } = context.repo
