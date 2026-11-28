@@ -98,7 +98,13 @@ jobs:
               await github.rest.issues.createComment({
                 owner, repo, issue_number: pr, body: `${note}\n\n${extra || ''}`,
               });
-              await github.rest.issues.addLabels({ owner, repo, issue_number: pr, labels: ['applied'] });
+              // 标签不存在时 API 会 422。标签只是给 auto-merge 兜底看的记号，
+              // 打不上不该让「已落地」这件事变成一次失败的 run（落地和关单才是主体）。
+              try {
+                await github.rest.issues.addLabels({ owner, repo, issue_number: pr, labels: ['applied'] });
+              } catch (e) {
+                core.warning(`打 applied 标签失败（${e.status || '?'}）：PR 仍会关闭，落地不受影响`);
+              }
               await github.rest.pulls.update({ owner, repo, pull_number: pr, state: 'closed' });
             };
 
@@ -186,11 +192,18 @@ jobs:
             }
 
             // ── 闸门⑤：跑 **base 仓自己的**校验器（唯一权威，与 CI 同一套规则）
-            let out = '';
-            const code = await exec.exec('python3', ['.github/scripts/validate_plugins.py', '--root', '.'], {
-              ignoreReturnCode: true,
-              listeners: { stdout: (d) => (out += d.toString()), stderr: (d) => (out += d.toString()) },
+            // 用 child_process 而不是 `exec` 全局：github-script 是否注入 `exec` 随版本变化，
+            // 而 `require('child_process')` 是 node 内建，永远有。这里挂掉会表现为「B 静默不工作」。
+            const { spawnSync } = require('child_process');
+            const run = spawnSync('python3', ['.github/scripts/validate_plugins.py', '--root', '.'], {
+              encoding: 'utf8',
+              maxBuffer: 8 * 1024 * 1024,
             });
+            const out = `${run.stdout || ''}${run.stderr || ''}`;
+            const code = run.status === null ? 1 : run.status;
+            if (run.error) {
+              return skip('校验器无法启动（python3 不可用）', String(run.error));
+            }
             if (code !== 0) {
               return skip('校验器不通过（`.github/scripts/validate_plugins.py`）', out.slice(-3000));
             }
