@@ -1,0 +1,79 @@
+name: Auto-merge validated plugin PRs
+
+# 2026-11-28：插件中心上传「不用人工点合并」。
+#
+# 为什么不塞进 validate.yml：validate 用 `pull_request` 触发，来自 fork 的 PR
+# 拿到的是**只读** GITHUB_TOKEN，合不了。改由本文件监听 validate 的完成事件
+# （`workflow_run`），此时 token 属于**本仓库**，才有 contents / pull-requests 写权限。
+#
+# 安全检查（缺一条就不合并，宁可留给人工）：
+#   1. 只处理**全部改动都在 `plugins/` 下**的 PR；任何触及 `.github/`、根文件、脚本的 PR
+#      一律不自动合 —— 防止有人用 PR 改写本 workflow 或校验脚本给自己提权；
+#   2. PR 必须来自 fork（head.repo.fork == true），作者归属由 validate_plugins.py 校验
+#      （目录名后缀必须等于 PR 作者登录名）；
+#   3. draft PR、已合并 PR 不处理。
+#
+# ⚠️ 副作用：**通过格式校验的插件会立即对所有用户可见**。validate 只校验清单/文件类型/
+# 权限声明/归属，**不审计代码内容** —— 插件是在用户机器上执行的 JS。
+# 要恢复人工审核：删掉这个文件（或在仓库 Settings → Actions 里禁用该工作流）即可。
+
+on:
+  workflow_run:
+    workflows: ["Validate plugin PRs"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Squash-merge the validated PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const attached = context.payload.workflow_run.pull_requests?.[0];
+            if (!attached) {
+              core.info("no PR attached to this run");
+              return;
+            }
+            const { owner, repo } = context.repo;
+            const number = attached.number;
+
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            if (pr.merged) {
+              core.info(`#${number} already merged`);
+              return;
+            }
+            if (pr.state !== "open") {
+              core.info(`#${number} is ${pr.state}`);
+              return;
+            }
+            if (pr.draft) {
+              core.info(`#${number} is a draft`);
+              return;
+            }
+            if (!pr.head.repo || !pr.head.repo.fork) {
+              core.info(`#${number} is not from a fork — leave it to a human`);
+              return;
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: number, per_page: 100,
+            });
+            const outside = files.filter((f) => !f.filename.startsWith("plugins/"));
+            if (outside.length > 0) {
+              core.info(`#${number} touches ${outside.length} file(s) outside plugins/ — skipping`);
+              for (const f of outside) core.info(`  ${f.filename}`);
+              return;
+            }
+
+            const res = await github.rest.pulls.merge({
+              owner, repo, pull_number: number, merge_method: "squash",
+            });
+            core.info(`merged #${number} -> ${res.data.sha}`);
